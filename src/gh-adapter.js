@@ -13,6 +13,12 @@ function parsePages(stdout) {
   return parsed.flatMap((page) => Array.isArray(page) ? page : [page]);
 }
 
+function normalizeListArgs(listId, fullName) {
+  if (String(listId).includes('/') && !String(fullName).includes('/')) [listId, fullName] = [fullName, listId];
+  if (!listId || !fullName?.includes('/')) throw new TypeError('listId and fullName are required');
+  return [listId, fullName];
+}
+
 export function createGhAdapter({ runner = execFile } = {}) {
   async function apiJson(path) {
     const output = await runGh(['api', '-H', 'Accept: application/vnd.github+json', path], runner);
@@ -86,6 +92,44 @@ export function createGhAdapter({ runner = execFile } = {}) {
         evidence.latestActivityAt = null; evidence.unavailable = { ...(evidence.unavailable || {}), activity: '读取 Issue/PR 活动失败' };
       }
       return evidence;
+    },
+    async listLists() {
+      const output = await runGh(['api', '--paginate', '--slurp', '-H', 'Accept: application/vnd.github+json', 'user/lists?per_page=100'], runner);
+      return parsePages(output);
+    },
+    async listListRepositories(listId) {
+      if (!listId) throw new TypeError('listId is required');
+      const output = await runGh(['api', '--paginate', '--slurp', '-H', 'Accept: application/vnd.github+json', `user/lists/${listId}/repos?per_page=100`], runner);
+      return parsePages(output);
+    },
+    async addToList(listId, fullName) {
+      [listId, fullName] = normalizeListArgs(listId, fullName);
+      try { await runGh(['api', '--method', 'PUT', '-H', 'Accept: application/vnd.github+json', `user/lists/${listId}/repos/${fullName}`], runner); return { ok: true, listId, fullName, action: 'add' }; }
+      catch (error) { throw new Error(`加入 List 失败：${friendlyGhError(error)}`); }
+    },
+    async removeFromList(listId, fullName) {
+      [listId, fullName] = normalizeListArgs(listId, fullName);
+      try { await runGh(['api', '--method', 'DELETE', '-H', 'Accept: application/vnd.github+json', `user/lists/${listId}/repos/${fullName}`], runner); return { ok: true, listId, fullName, action: 'remove' }; }
+      catch (error) { throw new Error(`移出 List 失败：${friendlyGhError(error)}`); }
+    },
+    async setUniqueList(listId, fullName) {
+      [listId, fullName] = normalizeListArgs(listId, fullName);
+      return this.addToList(listId, fullName);
+    },
+    async createList(name, description = '') {
+      if (!name?.trim()) throw new TypeError('name is required');
+      try { const output = await runGh(['api', '--method', 'POST', '-H', 'Accept: application/vnd.github+json', '-f', `name=${name}`, '-f', `description=${description}`, 'user/lists'], runner); return typeof output === 'string' ? JSON.parse(output) : output; }
+      catch (error) { throw new Error(`新建 List 失败：${friendlyGhError(error)}`); }
+    },
+    async renameList(listId, name) {
+      if (!listId || !name?.trim()) throw new TypeError('listId and name are required');
+      try { const output = await runGh(['api', '--method', 'PATCH', '-H', 'Accept: application/vnd.github+json', '-f', `name=${name}`, `user/lists/${listId}`], runner); return typeof output === 'string' ? JSON.parse(output) : output; }
+      catch (error) { throw new Error(`重命名 List 失败：${friendlyGhError(error)}`); }
+    },
+    async deleteList(listId) {
+      if (!listId) throw new TypeError('listId is required');
+      try { await runGh(['api', '--method', 'DELETE', '-H', 'Accept: application/vnd.github+json', `user/lists/${listId}`], runner); return { ok: true, listId, action: 'delete' }; }
+      catch (error) { throw new Error(`删除 List 失败：${friendlyGhError(error)}`); }
     }
   };
 }

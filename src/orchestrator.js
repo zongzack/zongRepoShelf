@@ -68,7 +68,7 @@ function normalizeRepo(repo, source, now, thresholds, supplemental = {}) {
   const evidence = { status, latestCommitAt: firstDefined(supplemental.latestCommitAt, repo.latestCommitAt, repo.latest_commit_at, repo.pushed_at, repo.updated_at, null), latestReleaseAt: firstDefined(supplemental.latestReleaseAt, repo.latestReleaseAt, repo.latest_release_at, repo.latest_release?.published_at, null), latestActivityAt: firstDefined(supplemental.latestActivityAt, repo.latestActivityAt, repo.activity_at, repo.updated_at, null), ...(Object.keys(unavailable).length ? { unavailable } : {}) };
   const healthSignals = buildSignals(evidence, thresholds, now);
   const recommendation = buildRecommendation(healthSignals);
-  return { id: String(repo.id ?? fullName), owner, name, fullName, url: repo.html_url || `https://github.com/${fullName}`, relation: { starred: source === 'starred', owned: source === 'owned', fork: Boolean(repo.fork) }, archived: status.archived, disabled: status.disabled, deprecated: status.deprecated, latestCommitAt: evidence.latestCommitAt, latestReleaseAt: evidence.latestReleaseAt, latestActivityAt: evidence.latestActivityAt, evidence, healthSignals, recommendation, priority: recommendation.priority, scannedAt: now.toISOString() };
+  return { id: String(repo.id ?? fullName), owner, name, fullName, url: repo.html_url || `https://github.com/${fullName}`, description: repo.description || '', relation: { starred: source === 'starred', owned: source === 'owned', fork: Boolean(repo.fork) }, archived: status.archived, disabled: status.disabled, deprecated: status.deprecated, language: repo.language || null, topics, lists: Array.isArray(repo.lists) ? [...repo.lists] : [], latestCommitAt: evidence.latestCommitAt, latestReleaseAt: evidence.latestReleaseAt, latestActivityAt: evidence.latestActivityAt, evidence, healthSignals, recommendation, priority: recommendation.priority, scannedAt: now.toISOString() };
 }
 
 function mergeDate(a, b) {
@@ -84,6 +84,7 @@ function mergeRepo(map, repo, source, now, thresholds) {
   const existing = map.get(item.fullName);
   if (!existing) { map.set(item.fullName, item); return { ok: true }; }
   existing.relation.starred ||= item.relation.starred; existing.relation.owned ||= item.relation.owned; existing.relation.fork ||= item.relation.fork;
+  existing.language ||= item.language; existing.description ||= item.description; existing.topics = [...new Set([...(existing.topics || []), ...(item.topics || [])])]; existing.lists = [...new Set([...(existing.lists || []), ...(item.lists || [])])];
   existing.archived ||= item.archived; existing.disabled ||= item.disabled; existing.deprecated ||= item.deprecated;
   existing.evidence.status = { archived: existing.archived, disabled: existing.disabled, deprecated: existing.deprecated };
   existing.evidence.latestCommitAt = mergeDate(existing.evidence.latestCommitAt, item.evidence.latestCommitAt); existing.evidence.latestReleaseAt = mergeDate(existing.evidence.latestReleaseAt, item.evidence.latestReleaseAt); existing.evidence.latestActivityAt = mergeDate(existing.evidence.latestActivityAt, item.evidence.latestActivityAt);
@@ -119,6 +120,37 @@ export function createOrchestrator({ github, store, clock = () => new Date(), th
   async function ensureLatest() { if (!latest) await store.load().then((value) => { latest = value; }); return latest; }
   function ensureAudit() { if (!latest.audit) latest.audit = []; return latest.audit; }
   function findItem(fullNameOrId) { return (latest?.items || []).find((item) => item.fullName === fullNameOrId || String(item.id) === String(fullNameOrId)); }
+  function normalizeListName(value) { return String(value || '').trim(); }
+  function findList(nameOrId) { return (latest?.lists || []).find((list) => String(list.id) === String(nameOrId) || list.name === nameOrId); }
+  function listWriteGuard(item) {
+    if (!item) return '项目条目不在最近扫描结果中';
+    if (!item.relation?.starred) return '未 Star 的本人拥有仓库不支持 GitHub List 写操作';
+    return null;
+  }
+  function normalizeListAction(action) {
+    const value = String(action || '').toLowerCase();
+    if (['add', 'join', '加入', 'add-to-list'].includes(value)) return 'add';
+    if (['remove', 'leave', '移出', 'remove-from-list'].includes(value)) return 'remove';
+    if (['unique', 'set-unique', '唯一', '设为唯一归类'].includes(value)) return 'unique';
+    return null;
+  }
+  function listActionInput(input = {}) {
+    if (Array.isArray(input)) return input;
+    if (Array.isArray(input.selections)) return input.selections;
+    if (Array.isArray(input.actions)) return input.actions;
+    return [];
+  }
+  function applyListMembership(fullName, listName, action) {
+    const item = findItem(fullName); if (!item) return;
+    item.lists = Array.isArray(item.lists) ? item.lists : [];
+    if (action === 'add' && !item.lists.includes(listName)) item.lists.push(listName);
+    if (action === 'remove') item.lists = item.lists.filter((name) => name !== listName);
+    if (action === 'unique') item.lists = [listName];
+  }
+  function recountLists(target = latest) {
+    if (!target) return [];
+    return (target.lists || []).map((list) => ({ ...list, repositoryCount: (target.items || []).filter((item) => item.lists?.includes(list.name)).length, pendingCount: (target.items || []).filter((item) => item.lists?.includes(list.name) && item.healthSignals?.length).length }));
+  }
   function actionInputFromResult(result) { return { fullName: result.fullName, action: result.action }; }
   return {
     async authStatus() { return normalizeAuth(await github.authStatus()); },
@@ -129,8 +161,78 @@ export function createOrchestrator({ github, store, clock = () => new Date(), th
       if (!latest) return null;
       const effective = normalizeThresholds({ ...latest.thresholds, ...nextThresholds }); const now = clock();
       latest = { ...latest, thresholds: effective, items: (latest.items || []).map((item) => recalculateItem(item, effective, now)), recalculatedAt: now.toISOString() };
+      latest.lists = recountLists(latest);
       await store.save(latest); return latest;
     },
+    async listOverview() {
+      await ensureLatest();
+      if (!latest) return { status: 'no-scan', lists: [], rules: [] };
+      const lists = recountLists(latest);
+      return { status: 'ok', lists, rules: latest.listRules || [] };
+    },
+    async previewListActions(input = {}) {
+      await ensureLatest();
+      if (!latest) return { status: 'no-scan', actions: [], groups: { add: [], remove: [], unique: [] }, invalid: [], total: 0 };
+      const actions = []; const invalid = []; const seen = new Set();
+      for (const raw of listActionInput(input)) {
+        const fullName = raw?.fullName || raw?.project || raw?.name;
+        const listName = normalizeListName(raw?.list || raw?.listName || raw?.targetList);
+        const action = normalizeListAction(raw?.action || raw?.type);
+        const item = findItem(fullName); const list = findList(listName);
+        const guard = listWriteGuard(item);
+        let reason = guard || (!list ? '目标 List 不存在于最近扫描结果中' : !action ? '不支持的 List 动作' : !fullName || !listName ? '项目条目和 List 均为必填' : null);
+        if (!reason && action === 'remove' && !(item.lists || []).includes(list.name)) reason = '项目当前不属于该 List';
+        if (!reason && action === 'add' && (item.lists || []).includes(list.name)) reason = '项目已经属于该 List';
+        const key = `${action}:${fullName}:${listName}`;
+        if (reason || seen.has(key)) { if (fullName && !seen.has(key)) invalid.push({ fullName, list: listName, action, reason: reason || '重复动作' }); continue; }
+        seen.add(key); actions.push({ id: key, fullName, project: fullName, listId: list.id, list: list.name, action, currentLists: [...(item.lists || [])], uniqueConfirmationRequired: action === 'unique' && (item.lists || []).some((name) => name !== list.name) });
+      }
+      const preview = { id: `list-preview-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, status: 'preview', createdAt: nowIso(), actions, invalid, groups: { add: actions.filter((a) => a.action === 'add'), remove: actions.filter((a) => a.action === 'remove'), unique: actions.filter((a) => a.action === 'unique') }, total: actions.length };
+      pendingPreview = preview; return preview;
+    },
+    async confirmListActions(input = {}) {
+      await ensureLatest();
+      const preview = input?.status === 'preview' && pendingPreview?.id === input.id ? input : (input?.previewId && pendingPreview?.id === input.previewId ? pendingPreview : null);
+      if (!latest) return { status: 'no-scan', results: [], summary: { total: 0, success: 0, failed: 0 } };
+      if (!preview) return { status: 'confirmation-required', results: [], error: '必须先预览并确认 List 动作' };
+      if (preview.id && pendingPreview?.id && preview.id !== pendingPreview.id) return { status: 'confirmation-required', results: [], error: 'List 批量预览已失效，请重新预览' };
+      const wanted = Array.isArray(input.actions) ? new Set(input.actions.map((a) => a.id || `${a.action}:${a.fullName}:${a.list}`)) : null;
+      const selected = (preview.actions || []).filter((a) => !wanted || wanted.has(a.id) || wanted.has(`${a.action}:${a.fullName}:${a.list}`));
+      const results = [];
+      for (const action of selected) {
+        const at = nowIso();
+        try {
+          if (action.action === 'unique' && action.uniqueConfirmationRequired && input.confirmUnique !== true) throw new Error('设为唯一归类会移除其他 List 关系，需要单独确认');
+          const method = action.action === 'add' ? 'addToList' : action.action === 'remove' ? 'removeFromList' : (typeof github.setUniqueList === 'function' ? 'setUniqueList' : 'addToList');
+          if (typeof github[method] !== 'function') throw new Error('GitHub 适配器不支持 List 动作');
+          if (action.action === 'unique' && action.uniqueConfirmationRequired) {
+            for (const current of action.currentLists.filter((name) => name !== action.list)) {
+              const existingList = findList(current);
+              if (existingList && typeof github.removeFromList === 'function') await github.removeFromList(existingList.id, action.fullName);
+            }
+          }
+          await github[method](action.listId, action.fullName);
+          applyListMembership(action.fullName, action.list, action.action);
+          const result = { ...action, status: 'succeeded', result: 'success', at }; results.push(result); ensureAudit().push({ project: action.fullName, action: `list-${action.action}`, list: action.list, time: at, result: 'success', status: 'succeeded' });
+        } catch (error) { const reason = error instanceof Error ? error.message : String(error); const result = { ...action, status: 'failed', result: 'failed', reason, error: reason, at }; results.push(result); ensureAudit().push({ project: action.fullName, action: `list-${action.action}`, list: action.list, time: at, result: 'failed', status: 'failed', reason }); }
+      }
+      latest.actionResults = [...(latest.actionResults || []), ...results]; await store.save(latest);
+      return { status: results.some((r) => r.status === 'failed') ? 'completed-with-errors' : 'completed', results, summary: { total: results.length, success: results.filter((r) => r.status === 'succeeded').length, failed: results.filter((r) => r.status === 'failed').length } };
+    },
+    async createList(input = {}) {
+      await ensureLatest(); const name = normalizeListName(input.name); if (!latest) return { status: 'no-scan', error: '暂无扫描结果' }; if (!name) return { status: 'invalid', error: 'List 名称不能为空' }; if (typeof github.createList !== 'function') return { status: 'failed', error: 'GitHub 适配器不支持新建 List' };
+      try { const list = await github.createList(name, input.description || ''); await ensureLatest(); latest.lists = [...(latest.lists || []), { id: String(list.id ?? list.name ?? name), name: list.name || name, description: list.description || input.description || '', private: Boolean(list.private), repositoryCount: 0, pendingCount: 0 }]; ensureAudit().push({ action: 'list-create', list: name, time: nowIso(), result: 'success', status: 'succeeded' }); await store.save(latest); return { status: 'succeeded', list: latest.lists.at(-1) }; } catch (error) { const reason = error instanceof Error ? error.message : String(error); if (latest) { ensureAudit().push({ action: 'list-create', list: name, time: nowIso(), result: 'failed', status: 'failed', reason }); await store.save(latest); } return { status: 'failed', error: reason }; }
+    },
+    async renameList(input = {}) {
+      await ensureLatest(); if (!latest) return { status: 'no-scan', error: '暂无扫描结果' }; const list = findList(input.id || input.list || input.name); const name = normalizeListName(input.newName || input.targetName); if (!list || !name) return { status: 'invalid', error: 'List 或新名称不能为空' }; if (typeof github.renameList !== 'function') return { status: 'failed', error: 'GitHub 适配器不支持重命名 List' };
+      try { await github.renameList(list.id, name); const old = list.name; list.name = name; for (const item of latest.items || []) item.lists = (item.lists || []).map((v) => v === old ? name : v); ensureAudit().push({ action: 'list-rename', list: old, newName: name, time: nowIso(), result: 'success', status: 'succeeded' }); await store.save(latest); return { status: 'succeeded', list }; } catch (error) { const reason = error instanceof Error ? error.message : String(error); ensureAudit().push({ action: 'list-rename', list: list.name, newName: name, time: nowIso(), result: 'failed', status: 'failed', reason }); await store.save(latest); return { status: 'failed', error: reason }; }
+    },
+    async deleteList(input = {}) {
+      await ensureLatest(); if (!latest) return { status: 'no-scan', error: '暂无扫描结果' }; const list = findList(input.id || input.list || input.name); if (!list) return { status: 'invalid', error: 'List 不存在' }; if (input.confirm !== true) return { status: 'confirmation-required', list: { ...list }, error: '删除 List 前需要二次确认' }; if (typeof github.deleteList !== 'function') return { status: 'failed', error: 'GitHub 适配器不支持删除 List' };
+      try { await github.deleteList(list.id); latest.lists = (latest.lists || []).filter((v) => String(v.id) !== String(list.id)); for (const item of latest.items || []) item.lists = (item.lists || []).filter((v) => v !== list.name); ensureAudit().push({ action: 'list-delete', list: list.name, time: nowIso(), result: 'success', status: 'succeeded' }); await store.save(latest); return { status: 'succeeded', list }; } catch (error) { const reason = error instanceof Error ? error.message : String(error); ensureAudit().push({ action: 'list-delete', list: list.name, time: nowIso(), result: 'failed', status: 'failed', reason }); await store.save(latest); return { status: 'failed', error: reason }; }
+    },
+    async saveListRules(input = {}) { await ensureLatest(); if (!latest) return { status: 'no-scan' }; const rules = Array.isArray(input.rules) ? input.rules : []; latest.listRules = rules.map((rule) => ({ type: ['keyword', 'topic', 'language'].includes(rule.type) ? rule.type : 'keyword', value: String(rule.value || '').trim(), list: normalizeListName(rule.list || rule.listName) })).filter((rule) => rule.value && rule.list); for (const item of latest.items || []) item.listSuggestions = latest.listRules.filter((rule) => { const value = rule.value.toLowerCase(); if (rule.type === 'language') return String(item.language || '').toLowerCase() === value; if (rule.type === 'topic') return (item.topics || []).some((topic) => String(topic).toLowerCase() === value); return [item.fullName, item.name, item.description, ...(item.topics || [])].some((field) => String(field || '').toLowerCase().includes(value)); }).map((rule) => ({ list: rule.list, targetList: rule.list, matchedField: rule.type, matchedValue: rule.value, rule })); await store.save(latest); return { status: 'succeeded', rules: latest.listRules }; },
+    async explainListRules(input = {}) { await ensureLatest(); const item = findItem(input.fullName || input.project || input.name); if (!item) return { status: 'not-found', matches: [] }; const matches = (latest.listRules || []).filter((rule) => { const value = rule.value.toLowerCase(); if (rule.type === 'language') return String(item.language || '').toLowerCase() === value; if (rule.type === 'topic') return (item.topics || []).some((topic) => String(topic).toLowerCase() === value); return [item.fullName, item.name, item.description, ...(item.topics || [])].some((field) => String(field || '').toLowerCase().includes(value)); }).map((rule) => ({ ...rule, matchedField: rule.type === 'language' ? 'language' : rule.type === 'topic' ? 'topic' : 'keyword', matchedValue: rule.value, targetList: rule.list })); return { status: 'ok', fullName: item.fullName, matches }; },
     async scan(options = {}) {
       await ensureLatest();
       const previousAudit = latest?.audit || [];
@@ -158,7 +260,35 @@ export function createOrchestrator({ github, store, clock = () => new Date(), th
         } catch (error) { failures.push({ source: 'health', item: item.fullName, reason: error instanceof Error ? error.message : String(error), at: now.toISOString() }); }
       }
       const items = [...map.values()].sort((a, b) => a.fullName.localeCompare(b.fullName));
-      const result = { version: 1, status: failures.length ? 'completed-with-errors' : 'completed', auth, scannedAt: now.toISOString(), thresholds: effective, items, failures, audit: previousAudit, actionResults: [], summary: { total: items.length + failures.length, success: items.length, failed: failures.length }, progress: { completed: completedSources, total: sources.length, percent: 100 } };
+      let lists = latest?.lists || [];
+      if (typeof github.listLists === 'function') {
+        try {
+          const remoteLists = await github.listLists();
+          lists = (remoteLists || []).map((list) => ({ id: String(list.id ?? list.name), name: normalizeListName(list.name), description: list.description || '', private: Boolean(list.private), repositoryCount: Number(list.repositoryCount ?? list.repositories_count ?? 0) })).filter((list) => list.name);
+          if (typeof github.listListRepositories === 'function') {
+            for (const list of lists) {
+              try {
+                const members = await github.listListRepositories(list.id);
+                for (const member of members || []) {
+                  const fullName = member.full_name || (member.owner?.login && member.name ? `${member.owner.login}/${member.name}` : null);
+                  const item = fullName && map.get(fullName); if (item) { item.lists = [...new Set([...(item.lists || []), list.name])]; }
+                }
+              } catch (error) { failures.push({ source: 'lists', list: list.name, reason: error instanceof Error ? error.message : String(error), at: now.toISOString() }); }
+            }
+          }
+        } catch (error) { failures.push({ source: 'lists', reason: error instanceof Error ? error.message : String(error), at: now.toISOString() }); }
+      }
+      const rules = Array.isArray(latest?.listRules) ? latest.listRules : [];
+      for (const item of items) {
+        item.listSuggestions = rules.filter((rule) => {
+          const value = String(rule.value || '').toLowerCase();
+          if (rule.type === 'language') return String(item.language || '').toLowerCase() === value;
+          if (rule.type === 'topic') return (item.topics || []).some((topic) => String(topic).toLowerCase() === value);
+          return [item.fullName, item.name, item.description, ...(item.topics || [])].some((field) => String(field || '').toLowerCase().includes(value));
+        }).map((rule) => ({ list: rule.list, targetList: rule.list, matchedField: rule.type, matchedValue: rule.value, rule }));
+      }
+      lists = recountLists({ lists, items });
+      const result = { version: 1, status: failures.length ? 'completed-with-errors' : 'completed', auth, scannedAt: now.toISOString(), thresholds: effective, items, lists, listRules: rules, failures, audit: previousAudit, actionResults: [], summary: { total: items.length + failures.length, success: items.length, failed: failures.length }, progress: { completed: completedSources, total: sources.length, percent: 100 } };
       latest = result; progress = { ...result.progress, phase: 'completed' }; await store.save(result); return result;
     },
     async previewActions(input = {}) {
