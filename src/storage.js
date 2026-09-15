@@ -1,8 +1,23 @@
-import { mkdir, readFile, rename, writeFile } from 'node:fs/promises';
+import { copyFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
 import { dirname } from 'node:path';
 
 export function createJsonStore(filePath) {
   if (!filePath) throw new TypeError('filePath is required');
+  const sanitize = (value, key = '') => {
+    if (typeof value === 'string') {
+      if (/(?:token|authorization|password|secret|api[-_]?key)/i.test(key) || /^gh[pousr]_[A-Za-z0-9_]+$/.test(value)) return undefined;
+      if (/(?:^|[_-])(body|readme|content|markdown|html)(?:$|[_-])/i.test(key) || /(?:issue|pull[-_]?request|pr)[-_]?(?:body|content|text)/i.test(key)) return undefined;
+      return value;
+    }
+    if (Array.isArray(value)) return value.map((entry) => sanitize(entry, key)).filter((entry) => entry !== undefined);
+    if (value && typeof value === 'object') {
+      return Object.fromEntries(Object.entries(value).flatMap(([childKey, childValue]) => {
+        const sanitized = sanitize(childValue, childKey);
+        return sanitized === undefined ? [] : [[childKey, sanitized]];
+      }));
+    }
+    return value;
+  };
   return {
     filePath,
     async load() {
@@ -12,14 +27,16 @@ export function createJsonStore(filePath) {
     async save(value) {
       await mkdir(dirname(filePath), { recursive: true });
       const tempPath = `${filePath}.tmp-${process.pid}-${Date.now()}`;
-      const json = JSON.stringify(value, (_key, v) => {
-        if (typeof v === 'string' && (/token|authorization/i.test(_key) || /^gh[pousr]_[A-Za-z0-9_]+$/.test(v))) return undefined;
-        if (_key === 'body' && typeof v === 'string') return undefined;
-        return v;
-      }, 2) + '\n';
+      const json = JSON.stringify(sanitize(value), null, 2) + '\n';
       await writeFile(tempPath, json, { encoding: 'utf8', mode: 0o600 });
       await rename(tempPath, filePath);
       return value;
+    },
+    async backup(destination) {
+      if (!destination) throw new TypeError('destination is required');
+      await mkdir(dirname(destination), { recursive: true });
+      await copyFile(filePath, destination);
+      return destination;
     }
   };
 }

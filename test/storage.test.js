@@ -14,3 +14,14 @@ test('JSON 存储原子写入并过滤 token 与正文', async () => {
   assert.equal((await store.load()).items[0].fullName, 'a/b');
   await rm(dir, { recursive: true, force: true });
 });
+
+test('JSON 存储过滤 Issue/PR 正文并支持可恢复备份', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'gh-org-')); const path = join(dir, 'data.json'); const backup = join(dir, 'backup.json');
+  const store = createJsonStore(path);
+  await store.save({ audit: [{ issueBody: 'private issue', pull_request_content: 'private pr', project: 'a/b' }], metadata: { clientSecret: 'top-secret' } });
+  await store.backup(backup);
+  const raw = await readFile(backup, 'utf8');
+  assert.equal(raw.includes('private issue'), false); assert.equal(raw.includes('private pr'), false); assert.equal(raw.includes('top-secret'), false);
+  assert.equal(JSON.parse(raw).audit[0].project, 'a/b');
+  await rm(dir, { recursive: true, force: true });
+});

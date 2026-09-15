@@ -159,6 +159,19 @@ export function createOrchestrator({ github, store, clock = () => new Date(), th
   return {
     async authStatus() { return normalizeAuth(await github.authStatus()); },
     async loadLastScan() { latest = latest || await store.load(); return latest; },
+    async actionHistory() {
+      await ensureLatest();
+      if (!latest) return { status: 'no-scan', entries: [] };
+      const entries = [...(latest.audit || [])].map((entry) => ({ ...entry }));
+      return { status: 'ok', entries };
+    },
+    dataPath() { return store.filePath; },
+    async exportData(destination) {
+      if (typeof store.backup !== 'function') return { status: 'unsupported', path: store.filePath };
+      const target = destination || `${store.filePath}.backup`;
+      await store.backup(target);
+      return { status: 'succeeded', path: target };
+    },
     getProgress() { return { ...progress }; },
     async recalculate(nextThresholds = {}) {
       if (!latest) await this.loadLastScan();
@@ -218,7 +231,7 @@ export function createOrchestrator({ github, store, clock = () => new Date(), th
           await github[method](action.listId, action.fullName);
           applyListMembership(action.fullName, action.list, action.action);
           const result = { ...action, status: 'succeeded', result: 'success', at }; results.push(result); ensureAudit().push({ project: action.fullName, action: `list-${action.action}`, list: action.list, time: at, result: 'success', status: 'succeeded' });
-        } catch (error) { const reason = error instanceof Error ? error.message : String(error); const result = { ...action, status: 'failed', result: 'failed', reason, error: reason, at }; results.push(result); ensureAudit().push({ project: action.fullName, action: `list-${action.action}`, list: action.list, time: at, result: 'failed', status: 'failed', reason }); }
+        } catch (error) { const reason = error instanceof Error ? error.message : String(error); const result = { ...action, status: 'failed', result: 'failed', retryable: true, reason, error: reason, at }; results.push(result); ensureAudit().push({ project: action.fullName, action: `list-${action.action}`, list: action.list, time: at, result: 'failed', status: 'failed', retryable: true, reason }); }
       }
       latest.actionResults = [...(latest.actionResults || []), ...results]; await store.save(latest);
       return { status: results.some((r) => r.status === 'failed') ? 'completed-with-errors' : 'completed', results, summary: { total: results.length, success: results.filter((r) => r.status === 'succeeded').length, failed: results.filter((r) => r.status === 'failed').length } };
@@ -247,8 +260,8 @@ export function createOrchestrator({ github, store, clock = () => new Date(), th
       const reportProgress = (phase) => { progress = { phase, completed: completedSources, total: sources.length, percent: Math.round(completedSources / sources.length * 100) }; options.onProgress?.(progress); };
       reportProgress('starting');
       for (const [source, fn] of sources) {
-        try { const repos = await fn.call(github); for (const repo of repos || []) { const merged = mergeRepo(map, repo, source, now, effective); if (!merged.ok) failures.push({ source, reason: merged.reason, item: repo?.full_name || repo?.name || 'unknown', at: now.toISOString() }); } }
-        catch (error) { failures.push({ source, reason: error instanceof Error ? error.message : String(error), at: now.toISOString() }); }
+        try { const repos = await fn.call(github); for (const repo of repos || []) { const merged = mergeRepo(map, repo, source, now, effective); if (!merged.ok) failures.push({ source, reason: merged.reason, item: repo?.full_name || repo?.name || 'unknown', at: now.toISOString(), status: 'failed', result: 'failed', retryable: false }); } }
+        catch (error) { failures.push({ source, reason: error instanceof Error ? error.message : String(error), at: now.toISOString(), status: 'failed', result: 'failed', retryable: true }); }
         completedSources += 1; reportProgress(source);
       }
       if (typeof github.getHealthEvidence === 'function') for (const item of map.values()) {
@@ -263,7 +276,7 @@ export function createOrchestrator({ github, store, clock = () => new Date(), th
             item.evidence = { status, latestCommitAt: firstDefined(extra.latestCommitAt, item.evidence.latestCommitAt, null), latestReleaseAt: firstDefined(extra.latestReleaseAt, item.evidence.latestReleaseAt, null), latestActivityAt: firstDefined(extra.latestActivityAt, item.evidence.latestActivityAt, null), ...(defaultBranch ? { defaultBranch } : {}), ...(forkOriginal ? { forkOriginal } : {}), ...(Object.keys(unavailable).length ? { unavailable } : {}) };
           }
           Object.assign(item, recalculateItem(item, effective, now));
-        } catch (error) { failures.push({ source: 'health', item: item.fullName, reason: error instanceof Error ? error.message : String(error), at: now.toISOString() }); }
+        } catch (error) { failures.push({ source: 'health', item: item.fullName, reason: error instanceof Error ? error.message : String(error), at: now.toISOString(), status: 'failed', result: 'failed', retryable: true }); }
       }
       const items = [...map.values()].sort((a, b) => a.fullName.localeCompare(b.fullName));
       let lists = latest?.lists || [];
@@ -279,10 +292,10 @@ export function createOrchestrator({ github, store, clock = () => new Date(), th
                   const fullName = member.full_name || (member.owner?.login && member.name ? `${member.owner.login}/${member.name}` : null);
                   const item = fullName && map.get(fullName); if (item) { item.lists = [...new Set([...(item.lists || []), list.name])]; }
                 }
-              } catch (error) { failures.push({ source: 'lists', list: list.name, reason: error instanceof Error ? error.message : String(error), at: now.toISOString() }); }
+              } catch (error) { failures.push({ source: 'lists', list: list.name, reason: error instanceof Error ? error.message : String(error), at: now.toISOString(), status: 'failed', result: 'failed', retryable: true }); }
             }
           }
-        } catch (error) { failures.push({ source: 'lists', reason: error instanceof Error ? error.message : String(error), at: now.toISOString() }); }
+        } catch (error) { failures.push({ source: 'lists', reason: error instanceof Error ? error.message : String(error), at: now.toISOString(), status: 'failed', result: 'failed', retryable: true }); }
       }
       const rules = Array.isArray(latest?.listRules) ? latest.listRules : [];
       for (const item of items) {
@@ -294,7 +307,9 @@ export function createOrchestrator({ github, store, clock = () => new Date(), th
         }).map((rule) => ({ list: rule.list, targetList: rule.list, matchedField: rule.type, matchedValue: rule.value, rule }));
       }
       lists = recountLists({ lists, items });
-      const result = { version: 1, status: failures.length ? 'completed-with-errors' : 'completed', auth, scannedAt: now.toISOString(), thresholds: effective, items, lists, listRules: rules, failures, audit: previousAudit, actionResults: [], summary: { total: items.length + failures.length, success: items.length, failed: failures.length }, progress: { completed: completedSources, total: sources.length, percent: 100 } };
+      const previousActions = latest?.actionResults || [];
+      const scanAudit = failures.map((failure) => ({ ...failure, action: 'scan', project: failure.item || failure.source || failure.list, time: failure.at }));
+      const result = { version: 1, status: failures.length ? 'completed-with-errors' : 'completed', auth, scannedAt: now.toISOString(), thresholds: effective, items, lists, listRules: rules, failures, audit: [...previousAudit, ...scanAudit], actionResults: previousActions, summary: { total: items.length + failures.length, success: items.length, failed: failures.length }, progress: { completed: completedSources, total: sources.length, percent: 100 } };
       latest = result; progress = { ...result.progress, phase: 'completed' }; await store.save(result); return result;
     },
     async previewLifecycleActions(input = {}) {
@@ -358,6 +373,16 @@ export function createOrchestrator({ github, store, clock = () => new Date(), th
       const preview = await this.previewLifecycleActions({ selections: [{ fullName, action: prior.action }] });
       return this.confirmLifecycleActions({ previewId: preview.id, actions: preview.actions, confirm: input.confirm === true, confirmFullName: input.confirmFullName });
     },
+    async retryListAction(input = {}) {
+      await ensureLatest();
+      const fullName = input.fullName || input.project || input.name;
+      const prior = [...(latest?.actionResults || [])].reverse().find((r) => r.fullName === fullName && (String(r.action || '').startsWith('list-') || ['add', 'remove', 'unique'].includes(r.action)) && r.status === 'failed');
+      if (!prior) return { status: 'not-found', results: [], error: '没有可重试的 List 失败动作' };
+      const action = String(prior.action).startsWith('list-') ? String(prior.action).slice('list-'.length) : prior.action;
+      const preview = await this.previewListActions({ selections: [{ fullName, list: prior.list, action }] });
+      if (!preview.actions.length) return { status: 'not-found', results: [], error: 'List 动作已不再适用，无法重试', invalid: preview.invalid };
+      return this.confirmListActions({ previewId: preview.id, actions: preview.actions, confirmUnique: input.confirmUnique === true });
+    },
     async previewActions(input = {}) {
       await ensureLatest();
       if (!latest) return { status: 'no-scan', groups: { unstar: [], keep: [] }, actions: [], total: 0 };
@@ -395,7 +420,7 @@ export function createOrchestrator({ github, store, clock = () => new Date(), th
           const result = { ...action, status: 'succeeded', result: 'success', at };
           results.push(result); ensureAudit().push({ project: action.fullName, action: action.action, time: at, result: 'success', status: 'succeeded' });
         } catch (error) {
-          const reason = error instanceof Error ? error.message : String(error); const result = { ...action, status: 'failed', result: 'failed', error: reason, reason, at };
+          const reason = error instanceof Error ? error.message : String(error); const result = { ...action, status: 'failed', result: 'failed', retryable: true, error: reason, reason, at };
           results.push(result); ensureAudit().push({ project: action.fullName, action: action.action, time: at, result: 'failed', status: 'failed', error: reason, reason });
         }
       }
@@ -416,6 +441,15 @@ export function createOrchestrator({ github, store, clock = () => new Date(), th
       const result = await this.confirmActions(retryPreview);
       return { ...result, retried: fullName };
     },
+    async retryFailedActionAny(input = {}) {
+      await ensureLatest();
+      const fullName = input.fullName || input.project || input.name;
+      const all = [...(latest?.actionResults || [])].reverse().find((r) => r.fullName === fullName && r.status === 'failed');
+      if (!all) return { status: 'not-found', results: [], error: '没有可重试的失败动作' };
+      if (String(all.action).startsWith('list-')) return this.retryListAction(input);
+      if (['archive', 'unarchive', 'delete'].includes(all.action)) return this.retryLifecycleAction(input);
+      return this.retryAction(input);
+    },
     async undoStar(input = {}) {
       await ensureLatest();
       const fullName = input.fullName || input.project || input.name; const prior = [...(latest?.actionResults || []), ...(latest?.lastActionResults || [])].reverse().find((r) => r.fullName === fullName && r.action === 'unstar' && r.status === 'succeeded' && !r.undone);
@@ -431,6 +465,9 @@ export function createOrchestrator({ github, store, clock = () => new Date(), th
         }
         if (typeof github.star !== 'function') throw new Error('GitHub 适配器不支持恢复 Star');
         await github.star(fullName); prior.undone = true;
+        prior.status = 'revoked'; prior.result = 'revoked'; prior.revokedAt = at;
+        const priorAudit = [...(latest.audit || [])].reverse().find((entry) => entry.project === fullName && entry.action === 'unstar' && entry.status === 'succeeded');
+        if (priorAudit) { priorAudit.status = 'revoked'; priorAudit.result = 'revoked'; priorAudit.revokedAt = at; }
         const result = { fullName, action: 'undo-unstar', status: 'succeeded', result: 'success', at };
         ensureAudit().push({ project: fullName, action: 'undo-unstar', time: at, result: 'success', status: 'succeeded' }); await store.save(latest); return result;
       } catch (error) {

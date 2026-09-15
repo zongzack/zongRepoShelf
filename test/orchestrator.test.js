@@ -139,3 +139,26 @@ test('撤销取消 Star 前重新检查状态，已恢复的关系不会被覆�
   const undone = await orchestrator.undoStar({ fullName: 'acme/a' }); assert.equal(undone.status, 'succeeded'); assert.equal(stars, 1);
   const second = await orchestrator.undoStar({ fullName: 'acme/a' }); assert.equal(second.status, 'not-found');
 });
+
+test('重新扫描不会覆盖既有动作结果，List 失败可从历史单项重试', async () => {
+  let fail = true;
+  const store = memoryStore();
+  const github = {
+    async authStatus() { return { state: 'authenticated' }; },
+    async listStarred() { return [repo('acme/a')]; },
+    async listOwned() { return []; },
+    async listLists() { return [{ id: 1, name: '工具' }]; },
+    async listListRepositories() { return []; },
+    async addToList() { if (fail) throw new Error('temporary failure'); }
+  };
+  const orch = createOrchestrator({ github, store });
+  await orch.scan();
+  const preview = await orch.previewListActions({ selections: [{ fullName: 'acme/a', list: '工具', action: 'add' }] });
+  const failed = await orch.confirmListActions(preview);
+  assert.equal(failed.results[0].status, 'failed');
+  assert.equal((await orch.actionHistory()).entries.at(-1).retryable, true);
+  fail = false;
+  assert.equal((await orch.retryListAction({ fullName: 'acme/a' })).summary.success, 1);
+  await orch.scan();
+  assert.equal((await orch.loadLastScan()).actionResults.length >= 2, true);
+});

@@ -44,3 +44,21 @@ test('动作 API 暴露预览、确认、重试和撤销入口', async () => {
   }
   assert.deepEqual(calls.map(([name]) => name), ['preview', 'confirm', 'retry', 'undo']); await new Promise((resolve) => server.close(resolve));
 });
+
+test('页面与 API 暴露动作历史、JSON 路径和备份导出', async () => {
+  const orchestrator = {
+    async authStatus() { return { state: 'authenticated' }; },
+    async loadLastScan() { return { items: [], failures: [], audit: [], summary: { total: 0, success: 0, failed: 0 }, progress: { completed: 0, total: 0, percent: 0 } }; },
+    async actionHistory() { return { status: 'ok', entries: [{ project: 'a/b', action: 'unstar', status: 'failed', reason: 'temporary' }] }; },
+    dataPath() { return '/tmp/github-organizer/data.json'; },
+    async exportData() { return { status: 'succeeded', path: '/tmp/github-organizer/data.json.backup' }; }
+  };
+  const server = createServer({ orchestrator }); const port = await listen(server);
+  const page = await (await fetch('http://127.0.0.1:' + port + '/')).text();
+  assert.match(page, /动作历史/); assert.match(page, /导出 JSON 备份/);
+  assert.equal((await (await fetch('http://127.0.0.1:' + port + '/api/history')).json()).entries.length, 1);
+  assert.equal((await (await fetch('http://127.0.0.1:' + port + '/api/data/path')).json()).path, '/tmp/github-organizer/data.json');
+  const exported = await fetch('http://127.0.0.1:' + port + '/api/data/export', { method: 'POST', headers: { 'content-type': 'application/json' }, body: '{}' });
+  assert.equal((await exported.json()).status, 'succeeded');
+  await new Promise((resolve) => server.close(resolve));
+});
