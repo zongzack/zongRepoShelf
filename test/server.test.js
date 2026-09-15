@@ -13,3 +13,17 @@ test('页面与 API 提供认证状态和显式扫描入口', async () => {
   const scan = await fetch(`http://127.0.0.1:${port}/api/scan`, { method: 'POST' }); assert.equal(scan.status, 403); assert.equal(scans, 1);
   await new Promise((resolve) => server.close(resolve));
 });
+
+test('页面提供搜索、健康筛选、关系筛选和阈值重算控件', async () => {
+  const orchestrator = {
+    async authStatus() { return { state: 'authenticated', message: 'ok' }; },
+    async loadLastScan() { return { items: [], failures: [], summary: { total: 0, success: 0, failed: 0 }, progress: { completed: 0, total: 0, percent: 0 } }; },
+    async recalculate(thresholds) { return { thresholds, items: [], failures: [], summary: { total: 0, success: 0, failed: 0 }, progress: { completed: 0, total: 0, percent: 100 } }; }
+  };
+  const server = createServer({ orchestrator }); const port = await listen(server);
+  const page = await (await fetch(`http://127.0.0.1:${port}/`)).text();
+  assert.match(page, /搜索 owner\/repo/); assert.match(page, /仅健康信号/); assert.match(page, /全部关系/); assert.match(page, /重新计算/); assert.match(page, /完整证据/);
+  const response = await fetch(`http://127.0.0.1:${port}/api/recalculate`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ noCommitMonths: 3 }) });
+  assert.equal(response.status, 200); assert.equal((await response.json()).thresholds.noCommitMonths, 3);
+  await new Promise((resolve) => server.close(resolve));
+});

@@ -14,6 +14,10 @@ function parsePages(stdout) {
 }
 
 export function createGhAdapter({ runner = execFile } = {}) {
+  async function apiJson(path) {
+    const output = await runGh(['api', '-H', 'Accept: application/vnd.github+json', path], runner);
+    return typeof output === 'string' ? JSON.parse(output) : output;
+  }
   return {
     async authStatus() {
       try { await runGh(['auth', 'status', '--hostname', 'github.com'], runner); return { state: 'authenticated', message: 'GitHub CLI 已登录' }; }
@@ -31,6 +35,38 @@ export function createGhAdapter({ runner = execFile } = {}) {
     async listOwned() {
       const output = await runGh(['api', '--paginate', '--slurp', '-H', 'Accept: application/vnd.github+json', 'user/repos?affiliation=owner&per_page=100&sort=updated'], runner);
       return parsePages(output);
+    },
+    async getHealthEvidence(fullName) {
+      if (!fullName || !fullName.includes('/')) throw new TypeError('fullName is required');
+      const evidence = { status: {} };
+      try {
+        const repo = await apiJson(`repos/${fullName}`);
+        evidence.archived = Boolean(repo.archived); evidence.disabled = Boolean(repo.disabled);
+        evidence.deprecated = Boolean(repo.deprecated) || (Array.isArray(repo.topics) && repo.topics.some((topic) => String(topic).toLowerCase() === 'deprecated'));
+        evidence.latestCommitAt = repo.pushed_at || repo.updated_at || null;
+        try {
+          const commits = await apiJson(`repos/${fullName}/commits?per_page=1`);
+          const latest = Array.isArray(commits) ? commits[0] : null;
+          evidence.latestCommitAt = latest?.commit?.committer?.date || latest?.commit?.author?.date || evidence.latestCommitAt;
+        } catch { /* 保留仓库元数据中的 pushed_at 作为降级证据 */ }
+      } catch (error) {
+        throw new Error(`读取 ${fullName} 仓库状态失败：${error instanceof Error ? error.message : String(error)}`);
+      }
+      try {
+        const release = await apiJson(`repos/${fullName}/releases/latest`);
+        evidence.latestReleaseAt = release?.published_at || release?.created_at || null;
+      } catch (error) {
+        const text = `${error?.stderr || ''} ${error?.message || ''}`;
+        if (/404|not found/i.test(text) || error?.status === 404) evidence.latestReleaseAt = null;
+        else evidence.latestReleaseAt = null;
+      }
+      try {
+        const activity = await apiJson(`search/issues?q=repo:${fullName}&sort=updated&order=desc&per_page=1`);
+        evidence.latestActivityAt = activity?.items?.[0]?.updated_at || null;
+      } catch {
+        evidence.latestActivityAt = null;
+      }
+      return evidence;
     }
   };
 }

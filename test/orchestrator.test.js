@@ -52,3 +52,58 @@ test('畸形项目条目会保留为可见失败记录', async () => {
   assert.equal(result.summary.failed, 1);
   assert.equal(result.failures[0].item, 'missing-owner');
 });
+
+test('健康信号在阈值边界命中并保留四类原始证据', async () => {
+  const github = {
+    async authStatus() { return { state: 'authenticated' }; },
+    async listStarred() { return [repo('acme/legacy', { archived: true })]; },
+    async listOwned() { return []; },
+    async getHealthEvidence() {
+      return {
+        archived: true,
+        disabled: false,
+        deprecated: false,
+        latestCommitAt: '2025-09-15T12:00:00.000Z',
+        latestReleaseAt: '2024-03-15T12:00:00.000Z',
+        latestActivityAt: '2026-03-15T12:00:00.000Z'
+      };
+    }
+  };
+  const result = await createOrchestrator({ github, store: memoryStore(), clock: () => new Date('2026-09-15T12:00:00.000Z') }).scan();
+  const item = result.items[0];
+
+  assert.deepEqual(item.evidence, {
+    status: { archived: true, disabled: false, deprecated: false },
+    latestCommitAt: '2025-09-15T12:00:00.000Z',
+    latestReleaseAt: '2024-03-15T12:00:00.000Z',
+    latestActivityAt: '2026-03-15T12:00:00.000Z'
+  });
+  assert.deepEqual(item.healthSignals.map((signal) => signal.code), [
+    'archived',
+    'no-recent-commit',
+    'no-recent-release',
+    'no-recent-activity'
+  ]);
+  assert.equal(item.recommendation.priority, 'high');
+  assert.deepEqual(item.recommendation.reasons, item.healthSignals.map((signal) => signal.label));
+});
+
+test('调整阈值后可重新计算命中信号', async () => {
+  const store = memoryStore();
+  const github = { async authStatus() { return { state: 'authenticated' }; }, async listStarred() { return [repo('acme/fresh', { pushed_at: '2025-12-01T00:00:00Z', updated_at: '2026-09-01T00:00:00Z' })]; }, async listOwned() { return []; } };
+  const orchestrator = createOrchestrator({ github, store, clock: () => new Date('2026-09-15T00:00:00Z') });
+  const scanned = await orchestrator.scan();
+  assert.equal(scanned.items[0].healthSignals.some((signal) => signal.code === 'no-recent-commit'), false);
+  const recalculated = await orchestrator.recalculate({ noCommitMonths: 1 });
+  assert.equal(recalculated.thresholds.noCommitMonths, 1);
+  assert.equal(recalculated.items[0].healthSignals.some((signal) => signal.code === 'no-recent-commit'), true);
+});
+
+test('缺失 release 与活动数据依然可解释', async () => {
+  const github = { async authStatus() { return { state: 'authenticated' }; }, async listStarred() { return [repo('acme/no-data', { pushed_at: '2026-09-01T00:00:00Z' })]; }, async listOwned() { return []; } };
+  const result = await createOrchestrator({ github, store: memoryStore(), clock: () => new Date('2026-09-15T00:00:00Z') }).scan();
+  const codes = result.items[0].healthSignals.map((signal) => signal.code);
+  assert.ok(codes.includes('no-recent-release'));
+  assert.ok(codes.includes('no-recent-activity'));
+  assert.match(result.items[0].recommendation.summary, /建议/);
+});
