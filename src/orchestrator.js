@@ -100,7 +100,26 @@ function recalculateItem(item, thresholds, now) {
 
 export function createOrchestrator({ github, store, clock = () => new Date(), thresholds = DEFAULT_THRESHOLDS }) {
   if (!github || !store) throw new TypeError('github and store are required');
-  let latest = null; let progress = { completed: 0, total: 2, percent: 0, phase: 'idle' };
+  let latest = null; let progress = { completed: 0, total: 2, percent: 0, phase: 'idle' }; let pendingPreview = null;
+  const nowIso = () => clock().toISOString();
+  function normalizeActionSelections(input = {}) {
+    if (Array.isArray(input)) return input.map((value) => typeof value === 'string' ? { fullName: value, action: 'unstar' } : value);
+    if (Array.isArray(input.selections)) return input.selections;
+    if (Array.isArray(input.items)) return input.items;
+    const result = [];
+    for (const action of ['unstar', 'keep']) for (const value of (input[action] || [])) result.push(typeof value === 'string' ? { fullName: value, action } : { ...value, action });
+    return result;
+  }
+  function normalizeAction(action) {
+    const value = String(action || '').toLowerCase();
+    if (['unstar', 'remove-star', 'remove_star', '取消 star', '取消star'].includes(value)) return 'unstar';
+    if (['keep', 'retain', '保留', '保留当前关系'].includes(value)) return 'keep';
+    return null;
+  }
+  async function ensureLatest() { if (!latest) await store.load().then((value) => { latest = value; }); return latest; }
+  function ensureAudit() { if (!latest.audit) latest.audit = []; return latest.audit; }
+  function findItem(fullNameOrId) { return (latest?.items || []).find((item) => item.fullName === fullNameOrId || String(item.id) === String(fullNameOrId)); }
+  function actionInputFromResult(result) { return { fullName: result.fullName, action: result.action }; }
   return {
     async authStatus() { return normalizeAuth(await github.authStatus()); },
     async loadLastScan() { latest = latest || await store.load(); return latest; },
@@ -113,6 +132,8 @@ export function createOrchestrator({ github, store, clock = () => new Date(), th
       await store.save(latest); return latest;
     },
     async scan(options = {}) {
+      await ensureLatest();
+      const previousAudit = latest?.audit || [];
       const auth = normalizeAuth(await github.authStatus());
       if (auth.state !== 'authenticated') return { status: 'blocked', auth, items: [], failures: [], summary: { total: 0, success: 0, failed: 0 }, progress: { completed: 0, total: 0, percent: 0 } };
       const now = clock(); const effective = normalizeThresholds({ ...thresholds, ...(options.thresholds || {}) }); const failures = []; const map = new Map();
@@ -137,9 +158,95 @@ export function createOrchestrator({ github, store, clock = () => new Date(), th
         } catch (error) { failures.push({ source: 'health', item: item.fullName, reason: error instanceof Error ? error.message : String(error), at: now.toISOString() }); }
       }
       const items = [...map.values()].sort((a, b) => a.fullName.localeCompare(b.fullName));
-      const result = { version: 1, status: failures.length ? 'completed-with-errors' : 'completed', auth, scannedAt: now.toISOString(), thresholds: effective, items, failures, summary: { total: items.length + failures.length, success: items.length, failed: failures.length }, progress: { completed: completedSources, total: sources.length, percent: 100 } };
+      const result = { version: 1, status: failures.length ? 'completed-with-errors' : 'completed', auth, scannedAt: now.toISOString(), thresholds: effective, items, failures, audit: previousAudit, actionResults: [], summary: { total: items.length + failures.length, success: items.length, failed: failures.length }, progress: { completed: completedSources, total: sources.length, percent: 100 } };
       latest = result; progress = { ...result.progress, phase: 'completed' }; await store.save(result); return result;
-    }
+    },
+    async previewActions(input = {}) {
+      await ensureLatest();
+      if (!latest) return { status: 'no-scan', groups: { unstar: [], keep: [] }, actions: [], total: 0 };
+      const seen = new Set(); const actions = []; const invalid = [];
+      for (const raw of normalizeActionSelections(input)) {
+        const fullName = raw?.fullName || raw?.name || raw?.project;
+        const action = normalizeAction(raw?.action || raw?.type || (raw?.unstar ? 'unstar' : undefined));
+        const item = findItem(fullName);
+        if (!item || !action || seen.has(item.fullName) || (action === 'unstar' && !item.relation?.starred)) { if (fullName && !seen.has(fullName)) invalid.push({ fullName, reason: !item ? '项目条目不在最近扫描结果中' : action === 'unstar' && !item.relation?.starred ? '项目当前没有 Star 关系，不能取消 Star' : '不支持的动作' }); continue; }
+        seen.add(item.fullName); actions.push({ id: `${action}:${item.fullName}`, fullName: item.fullName, project: item.fullName, action, relation: item.relation, url: item.url });
+      }
+      const preview = { id: `preview-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, status: 'preview', createdAt: nowIso(), groups: { unstar: actions.filter((a) => a.action === 'unstar'), keep: actions.filter((a) => a.action === 'keep') }, actions, invalid, total: actions.length };
+      pendingPreview = preview;
+      return preview;
+    },
+    async confirmActions(previewOrInput = {}) {
+      await ensureLatest();
+      let preview = previewOrInput?.status === 'preview' && pendingPreview?.id === previewOrInput.id ? previewOrInput : (previewOrInput?.previewId && pendingPreview?.id === previewOrInput.previewId ? pendingPreview : null);
+      if (preview && Array.isArray(previewOrInput.actions)) {
+        const wanted = new Set(previewOrInput.actions.map((action) => action.id || `${action.action}:${action.fullName}`));
+        const actions = (pendingPreview.actions || []).filter((action) => wanted.has(action.id) || wanted.has(`${action.action}:${action.fullName}`));
+        preview = { ...pendingPreview, actions, groups: { unstar: actions.filter((a) => a.action === 'unstar'), keep: actions.filter((a) => a.action === 'keep') }, total: actions.length };
+      }
+      if (!latest) return { status: 'no-scan', results: [], summary: { total: 0, success: 0, failed: 0 } };
+      if (!preview) return { status: 'confirmation-required', results: [], error: '必须先预览并确认批量动作' };
+      if (preview.id && pendingPreview?.id && preview.id !== pendingPreview.id) return { status: 'confirmation-required', results: [], error: '批量预览已失效，请重新预览' };
+      const results = [];
+      for (const action of preview.actions || []) {
+        const at = nowIso();
+        try {
+          if (action.action === 'unstar') {
+            if (typeof github.unstar !== 'function') throw new Error('GitHub 适配器不支持取消 Star');
+            await github.unstar(action.fullName);
+          }
+          const result = { ...action, status: 'succeeded', result: 'success', at };
+          results.push(result); ensureAudit().push({ project: action.fullName, action: action.action, time: at, result: 'success', status: 'succeeded' });
+        } catch (error) {
+          const reason = error instanceof Error ? error.message : String(error); const result = { ...action, status: 'failed', result: 'failed', error: reason, reason, at };
+          results.push(result); ensureAudit().push({ project: action.fullName, action: action.action, time: at, result: 'failed', status: 'failed', error: reason, reason });
+        }
+      }
+      latest.lastActionResults = results; latest.actionResults = [...(latest.actionResults || []), ...results];
+      if (pendingPreview?.id === preview.id) {
+        const done = new Set(results.map((result) => result.id));
+        const remaining = (pendingPreview.actions || []).filter((action) => !done.has(action.id));
+        pendingPreview = remaining.length ? { ...pendingPreview, actions: remaining, groups: { unstar: remaining.filter((a) => a.action === 'unstar'), keep: remaining.filter((a) => a.action === 'keep') }, total: remaining.length } : null;
+      }
+      await store.save(latest);
+      return { status: results.some((r) => r.status === 'failed') ? 'completed-with-errors' : 'completed', results, summary: { total: results.length, success: results.filter((r) => r.status === 'succeeded').length, failed: results.filter((r) => r.status === 'failed').length } };
+    },
+    async retryAction(input = {}) {
+      await ensureLatest();
+      const fullName = input.fullName || input.project || input.name; const prior = [...(latest?.actionResults || []), ...(latest?.lastActionResults || [])].reverse().find((r) => r.fullName === fullName && r.action === 'unstar' && r.status === 'failed');
+      if (!prior) return { status: 'not-found', results: [], error: '没有可重试的失败动作' };
+      const retryPreview = { id: `retry-${Date.now()}`, status: 'preview', actions: [actionInputFromResult(prior)] }; pendingPreview = retryPreview;
+      const result = await this.confirmActions(retryPreview);
+      return { ...result, retried: fullName };
+    },
+    async undoStar(input = {}) {
+      await ensureLatest();
+      const fullName = input.fullName || input.project || input.name; const prior = [...(latest?.actionResults || []), ...(latest?.lastActionResults || [])].reverse().find((r) => r.fullName === fullName && r.action === 'unstar' && r.status === 'succeeded' && !r.undone);
+      if (!prior) return { status: 'not-found', error: '没有可撤销的本次取消 Star 动作', fullName };
+      const at = nowIso(); let currentlyStarred;
+      try {
+        const check = github.isStarred || github.getStarredStatus || github.checkStarred;
+        if (typeof check !== 'function') throw new Error('GitHub 适配器不支持状态检查');
+        currentlyStarred = Boolean(await check.call(github, fullName));
+        if (currentlyStarred) {
+          const result = { fullName, action: 'undo-unstar', status: 'skipped', result: 'skipped', reason: '项目当前已是 Star 状态，未覆盖现有关系', at };
+          ensureAudit().push({ project: fullName, action: 'undo-unstar', time: at, result: 'skipped', status: 'skipped', reason: result.reason }); await store.save(latest); return result;
+        }
+        if (typeof github.star !== 'function') throw new Error('GitHub 适配器不支持恢复 Star');
+        await github.star(fullName); prior.undone = true;
+        const result = { fullName, action: 'undo-unstar', status: 'succeeded', result: 'success', at };
+        ensureAudit().push({ project: fullName, action: 'undo-unstar', time: at, result: 'success', status: 'succeeded' }); await store.save(latest); return result;
+      } catch (error) {
+        const reason = error instanceof Error ? error.message : String(error); const result = { fullName, action: 'undo-unstar', status: 'failed', result: 'failed', error: reason, reason, at, currentlyStarred };
+        ensureAudit().push({ project: fullName, action: 'undo-unstar', time: at, result: 'failed', status: 'failed', error: reason, reason }); await store.save(latest); return result;
+      }
+    },
+    async undoUnstar(input = {}) { return this.undoStar(input); },
+    async previewBatch(input = {}) { return this.previewActions(input); },
+    async confirmBatch(input = {}) { return this.confirmActions(input); },
+    async retryFailedAction(input = {}) { return this.retryAction(input); },
+    async undoAction(input = {}) { return this.undoStar(input); },
+    async executeActions(input = {}) { const preview = input?.status === 'preview' ? input : await this.previewActions(input); if (preview.status === 'preview' && !pendingPreview) pendingPreview = preview; return this.confirmActions(preview); }
   };
 }
 

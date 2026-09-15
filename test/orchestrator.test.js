@@ -113,3 +113,29 @@ test('月末阈值按日历月正确计算', async () => {
   const result = await createOrchestrator({ github, store: memoryStore(), clock: () => new Date('2026-03-31T00:00:00Z') }).scan({ thresholds: { noCommitMonths: 1, noReleaseMonths: 1, noActivityMonths: 1 } });
   assert.equal(result.items[0].healthSignals.some((signal) => signal.code === 'no-recent-commit'), false);
 });
+
+test('批量动作必须先预览并按取消 Star/保留关系分组确认', async () => {
+  const store = memoryStore(); let unstars = 0;
+  const github = { async authStatus() { return { state: 'authenticated' }; }, async listStarred() { return [repo('acme/a'), repo('acme/b')]; }, async listOwned() { return []; }, async unstar() { unstars++; } };
+  const orchestrator = createOrchestrator({ github, store }); await orchestrator.scan();
+  const blocked = await orchestrator.confirmActions({ actions: [] }); assert.equal(blocked.status, 'confirmation-required'); assert.equal(unstars, 0);
+  const preview = await orchestrator.previewActions({ selections: [{ fullName: 'acme/a', action: 'unstar' }, { fullName: 'acme/b', action: 'keep' }] });
+  assert.equal(preview.groups.unstar.length, 1); assert.equal(preview.groups.keep.length, 1); assert.equal(unstars, 0);
+  const first = await orchestrator.confirmActions({ previewId: preview.id, actions: preview.groups.unstar }); assert.equal(first.summary.success, 1); assert.equal(unstars, 1);
+  const second = await orchestrator.confirmActions({ previewId: preview.id, actions: preview.groups.keep }); assert.equal(second.results[0].action, 'keep'); assert.equal(unstars, 1);
+  const saved = await store.load(); assert.equal(saved.audit.length, 2); assert.equal(saved.audit[0].project, 'acme/a');
+});
+
+test('批量动作逐项保留失败，失败项可以单独重试', async () => {
+  let attempts = 0; const github = { async authStatus() { return { state: 'authenticated' }; }, async listStarred() { return [repo('acme/a'), repo('acme/b')]; }, async listOwned() { return []; }, async unstar(name) { attempts++; if (name === 'acme/a' && attempts === 1) throw new Error('rate limit exceeded'); } };
+  const orchestrator = createOrchestrator({ github, store: memoryStore() }); await orchestrator.scan(); const preview = await orchestrator.previewActions({ unstar: ['acme/a', 'acme/b'] });
+  const result = await orchestrator.confirmActions(preview); assert.equal(result.summary.success, 1); assert.equal(result.summary.failed, 1); assert.match(result.results.find((r) => r.status === 'failed').reason, /rate limit/);
+  const retried = await orchestrator.retryAction({ fullName: 'acme/a' }); assert.equal(retried.summary.success, 1); assert.equal(attempts, 3);
+});
+
+test('撤销取消 Star 前重新检查状态，已恢复的关系不会被覆盖', async () => {
+  let starred = true; let stars = 0; const github = { async authStatus() { return { state: 'authenticated' }; }, async listStarred() { return [repo('acme/a')]; }, async listOwned() { return []; }, async unstar() { starred = false; }, async isStarred() { return starred; }, async star() { stars++; starred = true; } };
+  const orchestrator = createOrchestrator({ github, store: memoryStore() }); await orchestrator.scan(); const preview = await orchestrator.previewActions({ unstar: ['acme/a'] }); await orchestrator.confirmActions(preview);
+  const undone = await orchestrator.undoStar({ fullName: 'acme/a' }); assert.equal(undone.status, 'succeeded'); assert.equal(stars, 1);
+  const second = await orchestrator.undoStar({ fullName: 'acme/a' }); assert.equal(second.status, 'not-found');
+});

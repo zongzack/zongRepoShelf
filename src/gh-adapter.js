@@ -36,6 +36,25 @@ export function createGhAdapter({ runner = execFile } = {}) {
       const output = await runGh(['api', '--paginate', '--slurp', '-H', 'Accept: application/vnd.github+json', 'user/repos?affiliation=owner&per_page=100&sort=updated'], runner);
       return parsePages(output);
     },
+    async unstar(fullName) {
+      if (!fullName || !fullName.includes('/')) throw new TypeError('fullName is required');
+      try { await runGh(['api', '--method', 'DELETE', '-H', 'Accept: application/vnd.github+json', `user/starred/${fullName}`], runner); return { ok: true, fullName, action: 'unstar' }; }
+      catch (error) { throw new Error(`取消 ${fullName} 的 Star 失败：${friendlyGhError(error)}`); }
+    },
+    async star(fullName) {
+      if (!fullName || !fullName.includes('/')) throw new TypeError('fullName is required');
+      try { await runGh(['api', '--method', 'PUT', '-H', 'Accept: application/vnd.github+json', `user/starred/${fullName}`], runner); return { ok: true, fullName, action: 'star' }; }
+      catch (error) { throw new Error(`恢复 ${fullName} 的 Star 失败：${friendlyGhError(error)}`); }
+    },
+    async isStarred(fullName) {
+      if (!fullName || !fullName.includes('/')) throw new TypeError('fullName is required');
+      try { await runGh(['api', '-H', 'Accept: application/vnd.github+json', `user/starred/${fullName}`], runner); return true; }
+      catch (error) {
+        const text = `${error?.stderr || ''} ${error?.message || ''}`;
+        if (error?.status === 404 || error?.code === 404 || /\b404\b|not found/i.test(text)) return false;
+        throw new Error(`检查 ${fullName} 的 Star 状态失败：${friendlyGhError(error)}`);
+      }
+    },
     async getHealthEvidence(fullName) {
       if (!fullName || !fullName.includes('/')) throw new TypeError('fullName is required');
       const evidence = { status: {} };
@@ -69,4 +88,12 @@ export function createGhAdapter({ runner = execFile } = {}) {
       return evidence;
     }
   };
+}
+
+function friendlyGhError(error) {
+  const text = `${error?.stderr || ''} ${error?.message || ''}`.trim();
+  if (/rate limit|secondary rate limit/i.test(text)) return 'GitHub 请求受限（rate limit），请稍后重试';
+  if (/403|forbidden|permission/i.test(text)) return 'GitHub 权限不足（403 Forbidden）';
+  if (/404|not found/i.test(text)) return 'GitHub 找不到该项目条目（404 Not Found）';
+  return text || 'GitHub 返回未知错误';
 }

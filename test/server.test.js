@@ -27,3 +27,20 @@ test('页面提供搜索、健康筛选、关系筛选和阈值重算控件', as
   assert.equal(response.status, 200); assert.equal((await response.json()).thresholds.noCommitMonths, 3);
   await new Promise((resolve) => server.close(resolve));
 });
+
+test('动作 API 暴露预览、确认、重试和撤销入口', async () => {
+  const calls = [];
+  const orchestrator = {
+    async authStatus() { return { state: 'authenticated' }; },
+    async loadLastScan() { return { items: [], failures: [], summary: { total: 0, success: 0, failed: 0 }, progress: { completed: 0, total: 0, percent: 0 } }; },
+    async previewActions(body) { calls.push(['preview', body]); return { status: 'preview', groups: { unstar: [], keep: [] }, actions: [], total: 0 }; },
+    async confirmActions(body) { calls.push(['confirm', body]); return { status: 'completed', results: [], summary: { total: 0, success: 0, failed: 0 } }; },
+    async retryAction(body) { calls.push(['retry', body]); return { status: 'not-found', results: [] }; },
+    async undoStar(body) { calls.push(['undo', body]); return { status: 'not-found' }; }
+  };
+  const server = createServer({ orchestrator }); const port = await listen(server);
+  for (const [path, body] of [['/api/actions/preview', { selections: [] }], ['/api/actions/confirm', { previewId: 'x' }], ['/api/actions/retry', { fullName: 'a/b' }], ['/api/actions/undo', { fullName: 'a/b' }]]) {
+    const response = await fetch(`http://127.0.0.1:${port}${path}`, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify(body) }); assert.equal(response.status, 200);
+  }
+  assert.deepEqual(calls.map(([name]) => name), ['preview', 'confirm', 'retry', 'undo']); await new Promise((resolve) => server.close(resolve));
+});
