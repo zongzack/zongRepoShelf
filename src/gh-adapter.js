@@ -50,7 +50,7 @@ export function createGhAdapter({ runner = execFile } = {}) {
           evidence.latestCommitAt = latest?.commit?.committer?.date || latest?.commit?.author?.date || evidence.latestCommitAt;
         } catch { /* 保留仓库元数据中的 pushed_at 作为降级证据 */ }
       } catch (error) {
-        throw new Error(`读取 ${fullName} 仓库状态失败：${error instanceof Error ? error.message : String(error)}`);
+        throw new Error(`读取 ${fullName} 项目条目状态失败：${error instanceof Error ? error.message : String(error)}`);
       }
       try {
         const release = await apiJson(`repos/${fullName}/releases/latest`);
@@ -58,13 +58,13 @@ export function createGhAdapter({ runner = execFile } = {}) {
       } catch (error) {
         const text = `${error?.stderr || ''} ${error?.message || ''}`;
         if (/404|not found/i.test(text) || error?.status === 404) evidence.latestReleaseAt = null;
-        else evidence.latestReleaseAt = null;
+        else { evidence.latestReleaseAt = null; evidence.unavailable = { ...(evidence.unavailable || {}), release: '读取 Release 失败' }; }
       }
       try {
         const activity = await apiJson(`search/issues?q=repo:${fullName}&sort=updated&order=desc&per_page=1`);
         evidence.latestActivityAt = activity?.items?.[0]?.updated_at || null;
       } catch {
-        evidence.latestActivityAt = null;
+        evidence.latestActivityAt = null; evidence.unavailable = { ...(evidence.unavailable || {}), activity: '读取 Issue/PR 活动失败' };
       }
       return evidence;
     }

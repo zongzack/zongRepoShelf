@@ -107,3 +107,9 @@ test('缺失 release 与活动数据依然可解释', async () => {
   assert.ok(codes.includes('no-recent-activity'));
   assert.match(result.items[0].recommendation.summary, /建议/);
 });
+
+test('月末阈值按日历月正确计算', async () => {
+  const github = { async authStatus() { return { state: 'authenticated' }; }, async listStarred() { return [repo('acme/calendar', { pushed_at: '2026-03-02T00:00:00Z', latest_release_at: '2026-03-02T00:00:00Z', activity_at: '2026-03-02T00:00:00Z' })]; }, async listOwned() { return []; } };
+  const result = await createOrchestrator({ github, store: memoryStore(), clock: () => new Date('2026-03-31T00:00:00Z') }).scan({ thresholds: { noCommitMonths: 1, noReleaseMonths: 1, noActivityMonths: 1 } });
+  assert.equal(result.items[0].healthSignals.some((signal) => signal.code === 'no-recent-commit'), false);
+});

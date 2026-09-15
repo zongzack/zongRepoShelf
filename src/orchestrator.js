@@ -14,7 +14,11 @@ function monthsAgo(date, months, now) {
   const then = new Date(date).getTime();
   if (!Number.isFinite(then)) return true;
   const cutoff = new Date(now.getTime());
+  const day = cutoff.getUTCDate();
+  cutoff.setUTCDate(1);
   cutoff.setUTCMonth(cutoff.getUTCMonth() - months);
+  const lastDay = new Date(Date.UTC(cutoff.getUTCFullYear(), cutoff.getUTCMonth() + 1, 0)).getUTCDate();
+  cutoff.setUTCDate(Math.min(day, lastDay));
   return then <= cutoff.getTime();
 }
 
@@ -29,9 +33,9 @@ function firstDefined(...values) { return values.find((value) => value !== undef
 function buildSignals(evidence, thresholds, now) {
   const signals = [];
   const status = evidence.status;
-  if (status.archived) signals.push({ code: 'archived', category: 'status', label: '仓库已归档', value: true });
-  if (status.disabled) signals.push({ code: 'disabled', category: 'status', label: '仓库已禁用', value: true });
-  if (status.deprecated) signals.push({ code: 'deprecated', category: 'status', label: '项目标记为 deprecated', value: true });
+  if (status.archived) signals.push({ code: 'archived', category: 'status', label: '项目条目已归档', value: true });
+  if (status.disabled) signals.push({ code: 'disabled', category: 'status', label: '项目条目已禁用', value: true });
+  if (status.deprecated) signals.push({ code: 'deprecated', category: 'status', label: '项目条目标记为 deprecated', value: true });
   const recency = [
     ['latestCommitAt', 'no-recent-commit', thresholds.noCommitMonths, '提交', '无提交记录'],
     ['latestReleaseAt', 'no-recent-release', thresholds.noReleaseMonths, 'Release', '从未发布 Release'],
@@ -40,7 +44,8 @@ function buildSignals(evidence, thresholds, now) {
   for (const [field, code, months, subject, missingLabel] of recency) {
     const value = evidence[field];
     const category = field.replace('latest', '').replace('At', '').toLowerCase();
-    if (!value) signals.push({ code, category, label: missingLabel, value: null, thresholdMonths: months });
+    const unavailable = evidence.unavailable?.[category];
+    if (!value && !unavailable) signals.push({ code, category, label: missingLabel, value: null, thresholdMonths: months });
     else if (monthsAgo(value, months, now)) signals.push({ code, category, label: `超过 ${months} 个月无${subject}`, value, thresholdMonths: months });
   }
   return signals;
@@ -59,7 +64,8 @@ function normalizeRepo(repo, source, now, thresholds, supplemental = {}) {
   const name = repo.name || fullName.split('/')[1];
   const topics = Array.isArray(repo.topics) ? repo.topics : [];
   const status = { archived: Boolean(firstDefined(supplemental.archived, repo.archived, false)), disabled: Boolean(firstDefined(supplemental.disabled, repo.disabled, false)), deprecated: Boolean(firstDefined(supplemental.deprecated, repo.deprecated, topics.some((topic) => String(topic).toLowerCase() === 'deprecated'))) };
-  const evidence = { status, latestCommitAt: firstDefined(supplemental.latestCommitAt, repo.latestCommitAt, repo.latest_commit_at, repo.pushed_at, repo.updated_at, null), latestReleaseAt: firstDefined(supplemental.latestReleaseAt, repo.latestReleaseAt, repo.latest_release_at, repo.latest_release?.published_at, null), latestActivityAt: firstDefined(supplemental.latestActivityAt, repo.latestActivityAt, repo.activity_at, repo.updated_at, null) };
+  const unavailable = supplemental.unavailable || {};
+  const evidence = { status, latestCommitAt: firstDefined(supplemental.latestCommitAt, repo.latestCommitAt, repo.latest_commit_at, repo.pushed_at, repo.updated_at, null), latestReleaseAt: firstDefined(supplemental.latestReleaseAt, repo.latestReleaseAt, repo.latest_release_at, repo.latest_release?.published_at, null), latestActivityAt: firstDefined(supplemental.latestActivityAt, repo.latestActivityAt, repo.activity_at, repo.updated_at, null), ...(Object.keys(unavailable).length ? { unavailable } : {}) };
   const healthSignals = buildSignals(evidence, thresholds, now);
   const recommendation = buildRecommendation(healthSignals);
   return { id: String(repo.id ?? fullName), owner, name, fullName, url: repo.html_url || `https://github.com/${fullName}`, relation: { starred: source === 'starred', owned: source === 'owned', fork: Boolean(repo.fork) }, archived: status.archived, disabled: status.disabled, deprecated: status.deprecated, latestCommitAt: evidence.latestCommitAt, latestReleaseAt: evidence.latestReleaseAt, latestActivityAt: evidence.latestActivityAt, evidence, healthSignals, recommendation, priority: recommendation.priority, scannedAt: now.toISOString() };
@@ -87,7 +93,7 @@ function mergeRepo(map, repo, source, now, thresholds) {
 }
 
 function recalculateItem(item, thresholds, now) {
-  const evidence = item.evidence || { status: { archived: item.archived, disabled: item.disabled, deprecated: item.deprecated }, latestCommitAt: item.latestCommitAt, latestReleaseAt: item.latestReleaseAt, latestActivityAt: item.latestActivityAt };
+  const evidence = item.evidence || { status: { archived: item.archived, disabled: item.disabled, deprecated: item.deprecated }, latestCommitAt: item.latestCommitAt, latestReleaseAt: item.latestReleaseAt, latestActivityAt: item.latestActivityAt, unavailable: {} };
   const healthSignals = buildSignals(evidence, thresholds, now); const recommendation = buildRecommendation(healthSignals);
   return { ...item, archived: evidence.status.archived, disabled: evidence.status.disabled, deprecated: evidence.status.deprecated, latestCommitAt: evidence.latestCommitAt, latestReleaseAt: evidence.latestReleaseAt, latestActivityAt: evidence.latestActivityAt, evidence, healthSignals, recommendation, priority: recommendation.priority };
 }
@@ -124,7 +130,8 @@ export function createOrchestrator({ github, store, clock = () => new Date(), th
           if (extra && typeof extra === 'object') {
             const status = { ...item.evidence.status, ...(extra.status || {}) };
             for (const key of ['archived', 'disabled', 'deprecated']) if (key in extra) status[key] = Boolean(extra[key]);
-            item.evidence = { status, latestCommitAt: firstDefined(extra.latestCommitAt, item.evidence.latestCommitAt, null), latestReleaseAt: firstDefined(extra.latestReleaseAt, item.evidence.latestReleaseAt, null), latestActivityAt: firstDefined(extra.latestActivityAt, item.evidence.latestActivityAt, null) };
+            const unavailable = { ...(item.evidence.unavailable || {}), ...(extra.unavailable || {}) };
+            item.evidence = { status, latestCommitAt: firstDefined(extra.latestCommitAt, item.evidence.latestCommitAt, null), latestReleaseAt: firstDefined(extra.latestReleaseAt, item.evidence.latestReleaseAt, null), latestActivityAt: firstDefined(extra.latestActivityAt, item.evidence.latestActivityAt, null), ...(Object.keys(unavailable).length ? { unavailable } : {}) };
           }
           Object.assign(item, recalculateItem(item, effective, now));
         } catch (error) { failures.push({ source: 'health', item: item.fullName, reason: error instanceof Error ? error.message : String(error), at: now.toISOString() }); }
