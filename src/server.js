@@ -23,10 +23,18 @@ $('listAdd').onclick=()=>listAction('add');$('listRemove').onclick=()=>listActio
 $('preview').onclick=makePreview;$('confirmUnstar').onclick=()=>confirmGroup('unstar');$('confirmKeep').onclick=()=>confirmGroup('keep');if($('listsManage'))$('listsManage').onclick=loadLists;
 </script></body></html>`;
 
+const lifecycleHtml = html
+  .replace('<button id="preview" class="secondary">批量预览</button>', '<button id="preview" class="secondary">批量预览</button><button id="lifecyclePreview" class="secondary">仓库生命周期</button><span class="muted">Archive / Unarchive / 删除（高级危险操作）</span>')
+  .replace('</script></body></html>', `
+const originalRenderDetail=renderDetail;renderDetail=function(){originalRenderDetail();const i=(data?.items||[]).find(x=>x.fullName===selected);if(!i||!i.relation?.owned)return;const box=document.createElement('section');box.className='danger-zone';box.innerHTML='<h4>高级仓库操作</h4><p>删除不可由本工具恢复。执行前将展示完整身份与健康证据。</p><button data-life="archive">Archive</button> <button data-life="unarchive">Unarchive</button> <button data-life="delete" class="secondary">删除仓库</button>';$('detail').appendChild(box);box.querySelectorAll('[data-life]').forEach(b=>b.onclick=async()=>{const action=b.dataset.life;const p=await actionRequest('/api/repositories/lifecycle/preview',{selections:[{fullName:i.fullName,action}]});const confirmFullName=action==='delete'?prompt('请输入完整 owner/repo 以确认删除：'):undefined;const ok=action==='delete'?confirmFullName===i.fullName:confirm('确认执行 '+action+'？');if(!ok)return;const result=await actionRequest('/api/repositories/lifecycle/confirm',{previewId:p.id,actions:p.actions,confirm:true,confirmFullName});$('notice').textContent=result.status+'：成功 '+(result.summary?.success||0)+'，失败 '+(result.summary?.failed||0);data=await (await fetch('/api/scan')).json();render();});};
+async function lifecyclePreview(){const selections=[...document.querySelectorAll('input[data-action]:checked')].map(x=>({fullName:x.dataset.name,action:'archive'}));if(!selections.length){$('notice').innerHTML='<div class="notice">请先选择本人拥有的项目条目。</div>';return;}const p=await actionRequest('/api/repositories/lifecycle/preview',{selections});$('notice').innerHTML='<div class="notice"><strong>仓库生命周期（高级区域）</strong><p>Archive：'+esc(p.groups.archive.map(x=>x.fullName).join('、')||'无')+'</p><p>Unarchive：'+esc(p.groups.unarchive.map(x=>x.fullName).join('、')||'无')+'</p><p class="error">删除不可由本工具恢复；详情面板可执行 Unarchive 或删除并要求确认。</p><pre>'+esc(JSON.stringify(p.actions,null,2))+'</pre></div>';}
+if($('lifecyclePreview'))$('lifecyclePreview').onclick=lifecyclePreview;
+</script></body></html>`);
+
 export function createServer({ orchestrator }) {
   return nodeCreateServer(async (req, res) => {
     try {
-      if (req.method === 'GET' && req.url === '/') { res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); return res.end(html); }
+      if (req.method === 'GET' && req.url === '/') { res.writeHead(200, { 'content-type': 'text/html; charset=utf-8' }); return res.end(lifecycleHtml); }
       if (req.method === 'GET' && req.url === '/api/status') return json(res, await orchestrator.authStatus());
       if (req.method === 'GET' && req.url === '/api/scan') return json(res, await orchestrator.loadLastScan() || { items: [], failures: [], summary: { total: 0, success: 0, failed: 0 }, progress: { completed: 0, total: 0, percent: 0 } });
       if (req.method === 'GET' && req.url === '/api/progress') return json(res, orchestrator.getProgress?.() || { completed: 0, total: 0, percent: 0, phase: 'idle' });
@@ -36,6 +44,12 @@ export function createServer({ orchestrator }) {
       if (req.method === 'POST' && req.url === '/api/actions/confirm') { if (typeof orchestrator.confirmActions !== 'function') return json(res, { error: '当前版本不支持批量动作' }, 400); return json(res, await orchestrator.confirmActions(await readJson(req))); }
       if (req.method === 'POST' && req.url === '/api/actions/retry') { if (typeof orchestrator.retryAction !== 'function') return json(res, { error: '当前版本不支持动作重试' }, 400); return json(res, await orchestrator.retryAction(await readJson(req))); }
       if (req.method === 'POST' && req.url === '/api/actions/undo') { if (typeof orchestrator.undoStar !== 'function') return json(res, { error: '当前版本不支持撤销' }, 400); return json(res, await orchestrator.undoStar(await readJson(req))); }
+      if (req.method === 'POST' && req.url === '/api/repositories/lifecycle/preview') { if (typeof orchestrator.previewLifecycleActions !== 'function') return json(res, { error: '当前版本不支持仓库生命周期动作' }, 400); return json(res, await orchestrator.previewLifecycleActions(await readJson(req))); }
+      if (req.method === 'POST' && req.url === '/api/repositories/lifecycle/confirm') { if (typeof orchestrator.confirmLifecycleActions !== 'function') return json(res, { error: '当前版本不支持仓库生命周期动作' }, 400); return json(res, await orchestrator.confirmLifecycleActions(await readJson(req))); }
+      if (req.method === 'POST' && req.url === '/api/repositories/lifecycle/retry') { if (typeof orchestrator.retryLifecycleAction !== 'function') return json(res, { error: '当前版本不支持仓库生命周期重试' }, 400); return json(res, await orchestrator.retryLifecycleAction(await readJson(req))); }
+      if (req.method === 'POST' && req.url === '/api/repositories/archive') { const body = await readJson(req); body.selections = [{ fullName: body.fullName, action: 'archive' }]; const p = await orchestrator.previewLifecycleActions(body); return json(res, await orchestrator.confirmLifecycleActions({ previewId: p.id, actions: p.actions, confirm: body.confirm, confirmFullName: body.confirmFullName })); }
+      if (req.method === 'POST' && req.url === '/api/repositories/unarchive') { const body = await readJson(req); body.selections = [{ fullName: body.fullName, action: 'unarchive' }]; const p = await orchestrator.previewLifecycleActions(body); return json(res, await orchestrator.confirmLifecycleActions({ previewId: p.id, actions: p.actions, confirm: body.confirm })); }
+      if (req.method === 'POST' && req.url === '/api/repositories/delete') { const body = await readJson(req); body.selections = [{ fullName: body.fullName, action: 'delete' }]; const p = await orchestrator.previewLifecycleActions(body); return json(res, await orchestrator.confirmLifecycleActions({ previewId: p.id, actions: p.actions, confirm: body.confirm, confirmFullName: body.confirmFullName })); }
       if (req.method === 'GET' && req.url === '/api/lists') { if (typeof orchestrator.listOverview !== 'function') return json(res, { lists: [], rules: [] }); return json(res, await orchestrator.listOverview()); }
       if (req.method === 'POST' && req.url === '/api/lists/actions/preview') { if (typeof orchestrator.previewListActions !== 'function') return json(res, { error: '当前版本不支持 List 动作' }, 400); return json(res, await orchestrator.previewListActions(await readJson(req))); }
       if (req.method === 'POST' && req.url === '/api/lists/actions/confirm') { if (typeof orchestrator.confirmListActions !== 'function') return json(res, { error: '当前版本不支持 List 动作' }, 400); return json(res, await orchestrator.confirmListActions(await readJson(req))); }
@@ -50,4 +64,4 @@ export function createServer({ orchestrator }) {
 }
 function json(res, value, status = 200) { res.writeHead(status, { 'content-type': 'application/json; charset=utf-8' }); res.end(JSON.stringify(value)); }
 function readJson(req) { return new Promise((resolve, reject) => { let raw = ''; req.on('data', chunk => { raw += chunk; if (raw.length > 1e6) reject(new Error('请求体过大')); }); req.on('end', () => { try { resolve(raw ? JSON.parse(raw) : {}); } catch (error) { reject(error); } }); req.on('error', reject); }); }
-export { html };
+export { lifecycleHtml as html };

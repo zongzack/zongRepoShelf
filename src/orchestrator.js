@@ -65,10 +65,11 @@ function normalizeRepo(repo, source, now, thresholds, supplemental = {}) {
   const topics = Array.isArray(repo.topics) ? repo.topics : [];
   const status = { archived: Boolean(firstDefined(supplemental.archived, repo.archived, false)), disabled: Boolean(firstDefined(supplemental.disabled, repo.disabled, false)), deprecated: Boolean(firstDefined(supplemental.deprecated, repo.deprecated, topics.some((topic) => String(topic).toLowerCase() === 'deprecated'))) };
   const unavailable = supplemental.unavailable || {};
-  const evidence = { status, latestCommitAt: firstDefined(supplemental.latestCommitAt, repo.latestCommitAt, repo.latest_commit_at, repo.pushed_at, repo.updated_at, null), latestReleaseAt: firstDefined(supplemental.latestReleaseAt, repo.latestReleaseAt, repo.latest_release_at, repo.latest_release?.published_at, null), latestActivityAt: firstDefined(supplemental.latestActivityAt, repo.latestActivityAt, repo.activity_at, repo.updated_at, null), ...(Object.keys(unavailable).length ? { unavailable } : {}) };
+  const forkOriginal = repo.parent?.full_name || repo.source?.full_name || repo.forked_from?.full_name || null;
+  const evidence = { status, latestCommitAt: firstDefined(supplemental.latestCommitAt, repo.latestCommitAt, repo.latest_commit_at, repo.pushed_at, repo.updated_at, null), latestReleaseAt: firstDefined(supplemental.latestReleaseAt, repo.latestReleaseAt, repo.latest_release_at, repo.latest_release?.published_at, null), latestActivityAt: firstDefined(supplemental.latestActivityAt, repo.latestActivityAt, repo.activity_at, repo.updated_at, null), ...(firstDefined(supplemental.defaultBranch, repo.default_branch) ? { defaultBranch: firstDefined(supplemental.defaultBranch, repo.default_branch) } : {}), ...(forkOriginal ? { forkOriginal } : {}), ...(Object.keys(unavailable).length ? { unavailable } : {}) };
   const healthSignals = buildSignals(evidence, thresholds, now);
   const recommendation = buildRecommendation(healthSignals);
-  return { id: String(repo.id ?? fullName), owner, name, fullName, url: repo.html_url || `https://github.com/${fullName}`, description: repo.description || '', relation: { starred: source === 'starred', owned: source === 'owned', fork: Boolean(repo.fork) }, archived: status.archived, disabled: status.disabled, deprecated: status.deprecated, language: repo.language || null, topics, lists: Array.isArray(repo.lists) ? [...repo.lists] : [], latestCommitAt: evidence.latestCommitAt, latestReleaseAt: evidence.latestReleaseAt, latestActivityAt: evidence.latestActivityAt, evidence, healthSignals, recommendation, priority: recommendation.priority, scannedAt: now.toISOString() };
+  return { id: String(repo.id ?? fullName), owner, name, fullName, url: repo.html_url || `https://github.com/${fullName}`, description: repo.description || '', relation: { starred: source === 'starred', owned: source === 'owned', fork: Boolean(repo.fork), ...(forkOriginal ? { forkOriginal } : {}) }, archived: status.archived, disabled: status.disabled, deprecated: status.deprecated, language: repo.language || null, topics, lists: Array.isArray(repo.lists) ? [...repo.lists] : [], latestCommitAt: evidence.latestCommitAt, latestReleaseAt: evidence.latestReleaseAt, latestActivityAt: evidence.latestActivityAt, evidence, healthSignals, recommendation, priority: recommendation.priority, scannedAt: now.toISOString() };
 }
 
 function mergeDate(a, b) {
@@ -87,6 +88,9 @@ function mergeRepo(map, repo, source, now, thresholds) {
   existing.language ||= item.language; existing.description ||= item.description; existing.topics = [...new Set([...(existing.topics || []), ...(item.topics || [])])]; existing.lists = [...new Set([...(existing.lists || []), ...(item.lists || [])])];
   existing.archived ||= item.archived; existing.disabled ||= item.disabled; existing.deprecated ||= item.deprecated;
   existing.evidence.status = { archived: existing.archived, disabled: existing.disabled, deprecated: existing.deprecated };
+  if (!existing.evidence.defaultBranch && item.evidence.defaultBranch) existing.evidence.defaultBranch = item.evidence.defaultBranch;
+  if (!existing.evidence.forkOriginal && item.evidence.forkOriginal) existing.evidence.forkOriginal = item.evidence.forkOriginal;
+  if (!existing.relation.forkOriginal && item.relation.forkOriginal) existing.relation.forkOriginal = item.relation.forkOriginal;
   existing.evidence.latestCommitAt = mergeDate(existing.evidence.latestCommitAt, item.evidence.latestCommitAt); existing.evidence.latestReleaseAt = mergeDate(existing.evidence.latestReleaseAt, item.evidence.latestReleaseAt); existing.evidence.latestActivityAt = mergeDate(existing.evidence.latestActivityAt, item.evidence.latestActivityAt);
   existing.latestCommitAt = existing.evidence.latestCommitAt; existing.latestReleaseAt = existing.evidence.latestReleaseAt; existing.latestActivityAt = existing.evidence.latestActivityAt;
   existing.healthSignals = buildSignals(existing.evidence, thresholds, now); existing.recommendation = buildRecommendation(existing.healthSignals); existing.priority = existing.recommendation.priority;
@@ -254,7 +258,9 @@ export function createOrchestrator({ github, store, clock = () => new Date(), th
             const status = { ...item.evidence.status, ...(extra.status || {}) };
             for (const key of ['archived', 'disabled', 'deprecated']) if (key in extra) status[key] = Boolean(extra[key]);
             const unavailable = { ...(item.evidence.unavailable || {}), ...(extra.unavailable || {}) };
-            item.evidence = { status, latestCommitAt: firstDefined(extra.latestCommitAt, item.evidence.latestCommitAt, null), latestReleaseAt: firstDefined(extra.latestReleaseAt, item.evidence.latestReleaseAt, null), latestActivityAt: firstDefined(extra.latestActivityAt, item.evidence.latestActivityAt, null), ...(Object.keys(unavailable).length ? { unavailable } : {}) };
+            const defaultBranch = firstDefined(extra.defaultBranch, item.evidence.defaultBranch);
+            const forkOriginal = firstDefined(extra.forkOriginal, item.evidence.forkOriginal);
+            item.evidence = { status, latestCommitAt: firstDefined(extra.latestCommitAt, item.evidence.latestCommitAt, null), latestReleaseAt: firstDefined(extra.latestReleaseAt, item.evidence.latestReleaseAt, null), latestActivityAt: firstDefined(extra.latestActivityAt, item.evidence.latestActivityAt, null), ...(defaultBranch ? { defaultBranch } : {}), ...(forkOriginal ? { forkOriginal } : {}), ...(Object.keys(unavailable).length ? { unavailable } : {}) };
           }
           Object.assign(item, recalculateItem(item, effective, now));
         } catch (error) { failures.push({ source: 'health', item: item.fullName, reason: error instanceof Error ? error.message : String(error), at: now.toISOString() }); }
@@ -290,6 +296,67 @@ export function createOrchestrator({ github, store, clock = () => new Date(), th
       lists = recountLists({ lists, items });
       const result = { version: 1, status: failures.length ? 'completed-with-errors' : 'completed', auth, scannedAt: now.toISOString(), thresholds: effective, items, lists, listRules: rules, failures, audit: previousAudit, actionResults: [], summary: { total: items.length + failures.length, success: items.length, failed: failures.length }, progress: { completed: completedSources, total: sources.length, percent: 100 } };
       latest = result; progress = { ...result.progress, phase: 'completed' }; await store.save(result); return result;
+    },
+    async previewLifecycleActions(input = {}) {
+      await ensureLatest();
+      if (!latest) return { status: 'no-scan', actions: [], invalid: [], groups: { archive: [], unarchive: [], delete: [] }, total: 0 };
+      const selections = Array.isArray(input) ? input : (input.selections || input.actions || []);
+      const actions = []; const invalid = []; const seen = new Set();
+      for (const raw of selections) {
+        const fullName = raw?.fullName || raw?.project || raw?.name;
+        const actionValue = String(raw?.action || raw?.type || '').toLowerCase();
+        const action = ['archive', '归档'].includes(actionValue) ? 'archive' : ['unarchive', 'un-archive', '取消归档'].includes(actionValue) ? 'unarchive' : ['delete', '删除'].includes(actionValue) ? 'delete' : null;
+        const item = findItem(fullName);
+        let reason = !item ? '项目条目不在最近扫描结果中' : !item.relation?.owned ? '仅允许对本人拥有的项目条目执行仓库生命周期动作' : !action ? '不支持的仓库生命周期动作' : null;
+        if (!reason && action === 'archive' && item.archived) reason = '项目已经归档';
+        if (!reason && action === 'unarchive' && !item.archived) reason = '项目当前未归档';
+        const key = `${action}:${fullName}`;
+        if (reason || seen.has(key)) { if (fullName) invalid.push({ fullName, action, reason: reason || '重复动作' }); continue; }
+        seen.add(key);
+        actions.push({ id: key, fullName: item.fullName, project: item.fullName, action, owned: true, fork: Boolean(item.relation.fork), forkOriginal: item.relation.forkOriginal || item.evidence?.forkOriginal || null, defaultBranch: item.evidence?.defaultBranch || null, latestCommitAt: item.latestCommitAt || item.evidence?.latestCommitAt || null, archived: item.archived, evidence: item.evidence, risk: action === 'delete' ? '删除不可由本工具恢复，需在高级危险操作区域二次确认' : null });
+      }
+      const preview = { id: `lifecycle-preview-${Date.now()}-${Math.random().toString(36).slice(2, 8)}`, status: 'preview', createdAt: nowIso(), actions, invalid, groups: { archive: actions.filter((a) => a.action === 'archive'), unarchive: actions.filter((a) => a.action === 'unarchive'), delete: actions.filter((a) => a.action === 'delete') }, total: actions.length };
+      pendingPreview = preview; return preview;
+    },
+    async confirmLifecycleActions(input = {}) {
+      await ensureLatest();
+      if (!latest) return { status: 'no-scan', results: [], summary: { total: 0, success: 0, failed: 0 } };
+      const preview = input?.status === 'preview' && pendingPreview?.id === input.id ? pendingPreview : input?.previewId && pendingPreview?.id === input.previewId ? pendingPreview : null;
+      if (!preview) return { status: 'confirmation-required', results: [], error: '必须先预览并确认仓库生命周期动作' };
+      const wanted = Array.isArray(input.actions) ? new Set(input.actions.map((a) => a.id || `${a.action}:${a.fullName}`)) : null;
+      const selected = (preview.actions || []).filter((a) => !wanted || wanted.has(a.id) || wanted.has(`${a.action}:${a.fullName}`));
+      const pendingDelete = selected.find((action) => action.action === 'delete' && (input.confirm !== true || input.confirmFullName !== action.fullName));
+      if (pendingDelete) return { status: 'confirmation-required', results: [], error: input.confirm !== true ? '删除前需要二次确认' : '必须输入完整 owner/repo 名称确认删除', requiredFullName: pendingDelete.fullName, evidence: pendingDelete.evidence, action: pendingDelete };
+      const pendingLifecycle = selected.find((action) => action.action !== 'delete' && input.confirm !== true);
+      if (pendingLifecycle) return { status: 'confirmation-required', results: [], error: 'Archive/Unarchive 前需要二次确认', action: pendingLifecycle };
+      const results = [];
+      for (const action of selected) {
+        const at = nowIso();
+        // 先落审计意图，再触碰 GitHub；崩溃或失败时仍留下可追溯记录。
+        const intent = { project: action.fullName, action: action.action, time: at, result: 'pending', status: 'pending', metadata: { owner: action.fullName.split('/')[0], name: action.fullName.split('/')[1], fork: action.fork, forkOriginal: action.forkOriginal, defaultBranch: action.defaultBranch, latestCommitAt: action.latestCommitAt, evidence: action.evidence } };
+        ensureAudit().push(intent); await store.save(latest);
+        try {
+          const method = action.action === 'archive' ? (github.archive ? 'archive' : github.archiveRepository ? 'archiveRepository' : 'setArchived') : action.action === 'unarchive' ? (github.unarchive ? 'unarchive' : github.unarchiveRepository ? 'unarchiveRepository' : 'setArchived') : (github.deleteRepository ? 'deleteRepository' : github.deleteRepo ? 'deleteRepo' : 'deleteRepository');
+          if (typeof github[method] !== 'function') throw new Error('GitHub 适配器不支持该仓库生命周期动作');
+          if (method === 'setArchived') await github[method](action.fullName, action.action === 'archive'); else await github[method](action.fullName);
+          intent.result = 'success'; intent.status = 'succeeded';
+          const item = findItem(action.fullName); if (item && action.action !== 'delete') { item.archived = action.action === 'archive'; item.evidence = { ...(item.evidence || {}), status: { ...(item.evidence?.status || {}), archived: item.archived } }; Object.assign(item, recalculateItem(item, latest.thresholds || DEFAULT_THRESHOLDS, clock())); }
+          if (action.action === 'delete') latest.items = (latest.items || []).filter((entry) => entry.fullName !== action.fullName);
+          results.push({ ...action, status: 'succeeded', result: 'success', at });
+        } catch (error) {
+          const reason = error instanceof Error ? error.message : String(error); intent.result = 'failed'; intent.status = 'failed'; intent.reason = reason;
+          results.push({ ...action, status: 'failed', result: 'failed', reason, error: reason, at, retryable: true });
+        }
+      }
+      latest.lastActionResults = results; latest.actionResults = [...(latest.actionResults || []), ...results]; await store.save(latest);
+      return { status: results.some((r) => r.status === 'failed') ? 'completed-with-errors' : 'completed', results, summary: { total: results.length, success: results.filter((r) => r.status === 'succeeded').length, failed: results.filter((r) => r.status === 'failed').length } };
+    },
+    async retryLifecycleAction(input = {}) {
+      await ensureLatest(); const fullName = input.fullName || input.project || input.name;
+      const prior = [...(latest?.actionResults || []), ...(latest?.lastActionResults || [])].reverse().find((r) => r.fullName === fullName && ['archive', 'unarchive', 'delete'].includes(r.action) && r.status === 'failed' && r.retryable !== false);
+      if (!prior) return { status: 'not-found', results: [], error: '没有可重试的仓库生命周期失败动作' };
+      const preview = await this.previewLifecycleActions({ selections: [{ fullName, action: prior.action }] });
+      return this.confirmLifecycleActions({ previewId: preview.id, actions: preview.actions, confirm: input.confirm === true, confirmFullName: input.confirmFullName });
     },
     async previewActions(input = {}) {
       await ensureLatest();

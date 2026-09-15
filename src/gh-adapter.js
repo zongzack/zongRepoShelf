@@ -61,6 +61,24 @@ export function createGhAdapter({ runner = execFile } = {}) {
         throw new Error(`检查 ${fullName} 的 Star 状态失败：${friendlyGhError(error)}`);
       }
     },
+    async setArchived(fullName, archived) {
+      if (!fullName || !fullName.includes('/')) throw new TypeError('fullName is required');
+      try {
+        await runGh(['api', '--method', 'PATCH', '-H', 'Accept: application/vnd.github+json', '-F', `archived=${Boolean(archived)}`, `repos/${fullName}`], runner);
+        return { ok: true, fullName, action: archived ? 'archive' : 'unarchive', archived: Boolean(archived) };
+      } catch (error) { throw new Error(`${archived ? '归档' : '取消归档'} ${fullName} 失败：${friendlyGhError(error)}`); }
+    },
+    async archive(fullName) { return this.setArchived(fullName, true); },
+    async unarchive(fullName) { return this.setArchived(fullName, false); },
+    async archiveRepository(fullName) { return this.setArchived(fullName, true); },
+    async unarchiveRepository(fullName) { return this.setArchived(fullName, false); },
+    async deleteRepository(fullName) {
+      if (!fullName || !fullName.includes('/')) throw new TypeError('fullName is required');
+      try {
+        await runGh(['api', '--method', 'DELETE', '-H', 'Accept: application/vnd.github+json', `repos/${fullName}`], runner);
+        return { ok: true, fullName, action: 'delete' };
+      } catch (error) { throw new Error(`删除 ${fullName} 失败：${friendlyGhError(error)}`); }
+    },
     async getHealthEvidence(fullName) {
       if (!fullName || !fullName.includes('/')) throw new TypeError('fullName is required');
       const evidence = { status: {} };
@@ -69,6 +87,8 @@ export function createGhAdapter({ runner = execFile } = {}) {
         evidence.archived = Boolean(repo.archived); evidence.disabled = Boolean(repo.disabled);
         evidence.deprecated = Boolean(repo.deprecated) || (Array.isArray(repo.topics) && repo.topics.some((topic) => String(topic).toLowerCase() === 'deprecated'));
         evidence.latestCommitAt = repo.pushed_at || repo.updated_at || null;
+        evidence.defaultBranch = repo.default_branch || null;
+        evidence.forkOriginal = repo.parent?.full_name || repo.source?.full_name || null;
         try {
           const commits = await apiJson(`repos/${fullName}/commits?per_page=1`);
           const latest = Array.isArray(commits) ? commits[0] : null;
