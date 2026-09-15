@@ -1,0 +1,8 @@
+{
+  "name": "github-organizer",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {"start": "node src/cli.js", "test": "node --test", "typecheck": "node --check src/cli.js && node --check src/orchestrator.js && node --check src/gh-adapter.js && node --check src/storage.js && node --check src/server.js"},
+  "devDependencies": {"typescript": "^5.6.3", "@types/node": "^22.0.0"}
+}
