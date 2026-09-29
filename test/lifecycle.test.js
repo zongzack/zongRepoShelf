@@ -21,7 +21,10 @@ test('Archive/Unarchive 仅允许自有仓库并保留失败项', async () => {
   const preview = await orch.previewLifecycleActions({ selections: [{ fullName: 'other/project', action: 'archive' }, { fullName: 'me/repo', action: 'archive' }] });
   assert.equal(preview.total, 1); assert.match(preview.invalid[0].reason, /本人拥有/);
   const failed = await orch.confirmLifecycleActions({ previewId: preview.id, actions: preview.actions, confirm: true }); assert.equal(failed.summary.failed, 1); assert.equal((await store.load()).items[0].fullName, 'me/repo');
-  fail = false; const retried = await orch.retryLifecycleAction({ fullName: 'me/repo', confirm: true }); assert.equal(retried.summary.success, 1); assert.deepEqual(calls, [['archive', 'me/repo'], ['archive', 'me/repo']]);
+  fail = false;
+  const retryPreview = await orch.previewLifecycleActions({ selections: [{ fullName: 'me/repo', action: 'archive' }] });
+  const retried = await orch.confirmLifecycleActions({ previewId: retryPreview.id, actions: retryPreview.actions, confirm: true });
+  assert.equal(retried.summary.success, 1); assert.deepEqual(calls, [['archive', 'me/repo'], ['archive', 'me/repo']]);
 });
 
 test('删除需要二次确认、完整名称并先写审计，失败可重试', async () => {
@@ -30,5 +33,7 @@ test('删除需要二次确认、完整名称并先写审计，失败可重试',
   const orch = createOrchestrator({ github, store }); await orch.scan(); const preview = await orch.previewLifecycleActions({ selections: [{ fullName: 'me/fork', action: 'delete' }] });
   const blocked = await orch.confirmLifecycleActions({ previewId: preview.id, actions: preview.actions, confirm: true, confirmFullName: 'wrong/name' }); assert.equal(blocked.status, 'confirmation-required'); assert.match(blocked.error, /完整 owner\/repo/);
   const failed = await orch.confirmLifecycleActions({ previewId: preview.id, actions: preview.actions, confirm: true, confirmFullName: 'me/fork' }); assert.equal(failed.summary.failed, 1); assert.equal((await store.load()).audit.at(-1).status, 'failed');
-  const retried = await orch.retryLifecycleAction({ fullName: 'me/fork', confirm: true, confirmFullName: 'me/fork' }); assert.equal(retried.summary.success, 1); assert.equal(attempts, 2);
+  const retryPreview = await orch.previewLifecycleActions({ selections: [{ fullName: 'me/fork', action: 'delete' }] });
+  const retried = await orch.confirmLifecycleActions({ previewId: retryPreview.id, actions: retryPreview.actions, confirm: true, confirmFullName: 'me/fork' });
+  assert.equal(retried.summary.success, 1); assert.equal(attempts, 2);
 });

@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+.pnpm-store/
+
+# Test and build output
+coverage/
+dist/
+build/
+*.tsbuildinfo
+
+# Runtime logs and temporary files
+*.log
+npm-debug.log*
+pnpm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+*.tmp
+*.tmp-*
+
+# Local configuration and secrets
+.env
+.env.*
+!.env.example
+*.local
+
+# Local GitHub organizer data and backups
+# Runtime data is kept in the project root but must never be committed.
+/data.json
+/data.json.backup
+*.backup
+.github-organizer/
+
+# Operating system and editor files
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+.workbuddy
+.scratch

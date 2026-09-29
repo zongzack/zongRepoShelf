@@ -1,0 +1,2649 @@
+<!doctype html>
+<html lang="zh-CN">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width,initial-scale=1" />
+    <title>GitHub 项目整理</title>
+    <style>
+      :root {
+        --font:
+          -apple-system, BlinkMacSystemFont, "SF Pro Text", "PingFang SC",
+          "Helvetica Neue", "Segoe UI", sans-serif;
+        --text-1: #1d1d1f;
+        --text-2: #5f5f66;
+        --text-3: #8e8e93;
+        --accent: #0071e3;
+        --accent-hover: #0077ed;
+        --accent-soft: rgba(0, 113, 227, 0.12);
+        --accent-text: #0b5cad;
+        --success-bg: rgba(52, 199, 89, 0.16);
+        --success-text: #1e7a38;
+        --warning-bg: rgba(255, 159, 10, 0.18);
+        --warning-text: #a04d00;
+        --danger-bg: rgba(255, 59, 48, 0.12);
+        --danger-text: #c1271f;
+        --danger: #d70015;
+        --glass: rgba(255, 255, 255, 0.55);
+        --glass-strong: rgba(255, 255, 255, 0.78);
+        --glass-border: rgba(255, 255, 255, 0.7);
+        --hairline: rgba(0, 0, 0, 0.07);
+        --shadow-panel: 0 12px 40px rgba(17, 24, 39, 0.08);
+        --shadow-dialog: 0 24px 80px rgba(10, 20, 40, 0.22);
+        --r-sm: 10px;
+        --r-md: 14px;
+        --r-lg: 18px;
+        --r-xl: 22px;
+        --ease: cubic-bezier(0.22, 1, 0.36, 1);
+      }
+      * {
+        box-sizing: border-box;
+      }
+      html {
+        font-family: var(--font);
+        color: var(--text-1);
+      }
+      body {
+        margin: 0;
+        min-height: 100vh;
+        background: #eef1f7;
+        overflow-x: hidden;
+      }
+      .aurora {
+        position: fixed;
+        inset: 0;
+        z-index: -1;
+        background:
+          radial-gradient(52% 42% at 12% 0%, rgba(0, 113, 227, 0.16), transparent 70%),
+          radial-gradient(46% 40% at 88% 6%, rgba(175, 82, 222, 0.14), transparent 70%),
+          radial-gradient(50% 46% at 50% 105%, rgba(255, 159, 10, 0.12), transparent 70%);
+      }
+      .shell {
+        max-width: 1180px;
+        margin: 0 auto;
+        padding: 28px 24px 120px;
+        display: grid;
+        gap: 16px;
+      }
+      .glass {
+        background: var(--glass);
+        backdrop-filter: blur(24px) saturate(1.8);
+        -webkit-backdrop-filter: blur(24px) saturate(1.8);
+        border: 1px solid var(--glass-border);
+        box-shadow: var(--shadow-panel);
+        border-radius: var(--r-lg);
+      }
+      .glass-strong {
+        background: var(--glass-strong);
+        backdrop-filter: blur(32px) saturate(1.9);
+        -webkit-backdrop-filter: blur(32px) saturate(1.9);
+        border: 1px solid var(--glass-border);
+      }
+
+      /* ---------- 顶栏 ---------- */
+      .topbar {
+        display: flex;
+        align-items: center;
+        gap: 12px;
+        padding: 14px 18px;
+      }
+      .top-actions {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+      }
+      .skip-link {
+        position: fixed;
+        top: 8px;
+        left: 8px;
+        z-index: 100;
+        padding: 8px 12px;
+        border-radius: var(--r-sm);
+        background: #fff;
+        color: var(--accent-text);
+        transform: translateY(-150%);
+      }
+      .skip-link:focus {
+        transform: translateY(0);
+      }
+      .sr-only {
+        position: absolute;
+        width: 1px;
+        height: 1px;
+        padding: 0;
+        margin: -1px;
+        overflow: hidden;
+        clip: rect(0, 0, 0, 0);
+        white-space: nowrap;
+        border: 0;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        font-size: 17px;
+        font-weight: 600;
+        letter-spacing: 0;
+      }
+      .brand-mark {
+        width: 30px;
+        height: 30px;
+        border-radius: 9px;
+        background: linear-gradient(135deg, #0a84ff, #5e5ce6);
+        box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.45), 0 4px 12px rgba(10, 132, 255, 0.35);
+        display: grid;
+        place-items: center;
+        color: #fff;
+        font-size: 15px;
+        font-weight: 700;
+      }
+      .spacer {
+        flex: 1;
+      }
+      .tiny {
+        font-size: 12px;
+      }
+      .muted {
+        color: var(--text-2);
+      }
+      .ellipsis {
+        max-width: 240px;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+
+      /* ---------- 按钮 ---------- */
+      .btn {
+        appearance: none;
+        border: 1px solid var(--hairline);
+        background: rgba(255, 255, 255, 0.65);
+        color: var(--text-1);
+        font: inherit;
+        font-size: 13px;
+        font-weight: 500;
+        padding: 7px 14px;
+        border-radius: 999px;
+        cursor: pointer;
+        transition: all 0.16s var(--ease);
+        white-space: nowrap;
+      }
+      .btn:hover:not(:disabled) {
+        background: rgba(255, 255, 255, 0.9);
+        box-shadow: 0 2px 10px rgba(17, 24, 39, 0.1);
+      }
+      .btn:active:not(:disabled) {
+        transform: scale(0.97);
+      }
+      .btn:disabled {
+        opacity: 0.45;
+        cursor: not-allowed;
+      }
+      .btn-primary {
+        background: var(--accent);
+        border-color: transparent;
+        color: #fff;
+        box-shadow: 0 4px 14px rgba(0, 113, 227, 0.32);
+      }
+      .btn-primary:hover:not(:disabled) {
+        background: var(--accent-hover);
+        box-shadow: 0 6px 18px rgba(0, 113, 227, 0.4);
+      }
+      .btn-danger {
+        background: var(--danger-bg);
+        border-color: rgba(255, 59, 48, 0.25);
+        color: var(--danger-text);
+      }
+      .btn-danger:hover:not(:disabled) {
+        background: rgba(255, 59, 48, 0.2);
+        box-shadow: none;
+      }
+      .btn:focus-visible,
+      input:focus-visible,
+      select:focus-visible,
+      .filter-select-trigger:focus-visible,
+      .filter-select-input:focus-visible,
+      .filter-select-option:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: 2px;
+      }
+      input[type="checkbox"] {
+        width: 16px;
+        height: 16px;
+        padding: 0;
+        accent-color: var(--accent);
+        cursor: pointer;
+      }
+
+      /* ---------- 徽章 / 信号 ---------- */
+      .badge {
+        padding: 4px 11px;
+        border-radius: 999px;
+        font-size: 12px;
+        font-weight: 500;
+        background: rgba(0, 0, 0, 0.06);
+        color: var(--text-2);
+      }
+      .badge.ok {
+        background: var(--success-bg);
+        color: var(--success-text);
+      }
+      .badge.bad {
+        background: var(--danger-bg);
+        color: var(--danger-text);
+      }
+      .signal {
+        display: inline-block;
+        margin: 2px 4px 2px 0;
+        padding: 3px 9px;
+        border-radius: 999px;
+        font-size: 12px;
+        background: var(--warning-bg);
+        color: var(--warning-text);
+      }
+      .chip-list {
+        display: inline-block;
+        margin: 2px 4px 2px 0;
+        padding: 3px 9px;
+        border-radius: 999px;
+        font-size: 12px;
+        background: var(--accent-soft);
+        color: var(--accent-text);
+      }
+
+      /* ---------- 进度条 ---------- */
+      .progress {
+        height: 4px;
+        border-radius: 999px;
+        background: rgba(0, 0, 0, 0.07);
+        overflow: hidden;
+        margin: -6px 6px 0;
+      }
+      .progress i {
+        display: block;
+        height: 100%;
+        width: 0;
+        border-radius: 999px;
+        background: linear-gradient(90deg, #0a84ff, #5e5ce6);
+        transition: width 0.4s var(--ease);
+      }
+
+      /* ---------- 筛选栏 ---------- */
+      .filters {
+        position: relative;
+        z-index: 20;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        flex-wrap: wrap;
+        padding: 12px 16px;
+      }
+      input,
+      select {
+        font: inherit;
+        font-size: 13px;
+        color: var(--text-1);
+        padding: 7px 12px;
+        border: 1px solid var(--hairline);
+        border-radius: var(--r-sm);
+        background: rgba(255, 255, 255, 0.7);
+        transition: border-color 0.15s var(--ease), box-shadow 0.15s var(--ease);
+      }
+      input:focus,
+      select:focus {
+        outline: none;
+        border-color: var(--accent);
+        box-shadow: 0 0 0 3px rgba(0, 113, 227, 0.15);
+      }
+      #search {
+        width: 200px;
+      }
+      .filter-select {
+        position: relative;
+        min-width: 104px;
+      }
+      .form-grid .filter-select {
+        width: 100%;
+        min-width: 0;
+      }
+      .filter-select:has(#signal) {
+        min-width: 174px;
+      }
+      .filter-select select:not([hidden]) {
+        width: 100%;
+      }
+      .filter-select-trigger {
+        width: 100%;
+        min-height: 34px;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 7px 10px 7px 12px;
+        border: 1px solid var(--hairline);
+        border-radius: var(--r-sm);
+        background: rgba(255, 255, 255, 0.7);
+        color: var(--text-1);
+        font: inherit;
+        font-size: 13px;
+        text-align: left;
+        cursor: pointer;
+        transition: border-color 0.15s var(--ease), background 0.15s var(--ease), box-shadow 0.15s var(--ease);
+      }
+      .filter-select-trigger:hover,
+      .filter-select-input:hover,
+      .filter-select.open .filter-select-trigger {
+        background: rgba(255, 255, 255, 0.9);
+        border-color: rgba(0, 113, 227, 0.34);
+      }
+      .filter-select.open .filter-select-trigger,
+      .filter-select.open .filter-select-input {
+        box-shadow: 0 0 0 3px rgba(0, 113, 227, 0.15);
+        border-color: var(--accent);
+      }
+      .filter-select-label {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .filter-select-chevron {
+        width: 7px;
+        height: 7px;
+        flex: none;
+        border-right: 1.5px solid var(--text-2);
+        border-bottom: 1.5px solid var(--text-2);
+        transform: translateY(-2px) rotate(45deg);
+        transition: transform 0.18s var(--ease);
+      }
+      .filter-select-input {
+        width: 100%;
+        min-height: 36px;
+        padding-right: 36px;
+      }
+      .filter-select > .filter-select-chevron {
+        position: absolute;
+        z-index: 1;
+        top: 50%;
+        right: 14px;
+        pointer-events: none;
+      }
+      .filter-select.open .filter-select-chevron {
+        transform: translateY(2px) rotate(225deg);
+      }
+      .filter-select-options {
+        position: fixed;
+        z-index: 70;
+        width: max-content;
+        max-width: min(280px, calc(100vw - 32px));
+        max-height: min(360px, calc(100vh - 24px));
+        overflow-y: auto;
+        display: grid;
+        gap: 2px;
+        margin: 0;
+        padding: 6px;
+        border: 1px solid var(--glass-border);
+        border-radius: var(--r-md);
+        background: rgba(255, 255, 255, 0.9);
+        backdrop-filter: blur(32px) saturate(1.9);
+        -webkit-backdrop-filter: blur(32px) saturate(1.9);
+        box-shadow: 0 16px 42px rgba(10, 20, 40, 0.18), inset 0 1px 0 rgba(255, 255, 255, 0.72);
+        animation: filter-menu-in 0.16s var(--ease);
+      }
+      .filter-select-options[hidden] {
+        display: none;
+      }
+      .filter-select-option {
+        position: relative;
+        min-height: 34px;
+        display: flex;
+        align-items: center;
+        padding: 7px 34px 7px 10px;
+        border-radius: 9px;
+        color: var(--text-1);
+        font-size: 13px;
+        line-height: 1.35;
+        white-space: nowrap;
+        cursor: pointer;
+        user-select: none;
+        overflow: hidden;
+        text-overflow: ellipsis;
+      }
+      .filter-select-option:hover,
+      .filter-select-option:focus-visible,
+      .filter-select-option[data-active="true"] {
+        background: var(--accent-soft);
+        color: var(--accent-text);
+        outline: none;
+      }
+      .filter-select-option[aria-selected="true"] {
+        background: rgba(0, 113, 227, 0.1);
+        color: var(--accent-text);
+        font-weight: 500;
+      }
+      .filter-select-option[aria-selected="true"]::after {
+        content: "";
+        position: absolute;
+        right: 13px;
+        top: 50%;
+        width: 8px;
+        height: 4px;
+        border-left: 1.7px solid var(--accent);
+        border-bottom: 1.7px solid var(--accent);
+        transform: translateY(-65%) rotate(-45deg);
+      }
+      .filter-select-empty {
+        padding: 9px 10px;
+        color: var(--text-3);
+        font-size: 13px;
+      }
+      @keyframes filter-menu-in {
+        from {
+          opacity: 0;
+          transform: translateY(-5px) scale(0.985);
+        }
+      }
+      .segmented {
+        display: inline-flex;
+        padding: 3px;
+        border-radius: 999px;
+        background: rgba(0, 0, 0, 0.06);
+        gap: 2px;
+      }
+      .segmented label {
+        position: relative;
+        font-size: 12.5px;
+        padding: 5px 12px;
+        border-radius: 999px;
+        cursor: pointer;
+        color: var(--text-2);
+        transition: all 0.15s var(--ease);
+      }
+      .segmented label:has(input:checked) {
+        background: rgba(255, 255, 255, 0.95);
+        color: var(--text-1);
+        font-weight: 500;
+        box-shadow: 0 1px 4px rgba(17, 24, 39, 0.12);
+      }
+      .segmented input {
+        position: absolute;
+        opacity: 0;
+        pointer-events: none;
+      }
+
+      /* ---------- 下拉菜单 ---------- */
+      .menu-wrap {
+        position: relative;
+      }
+      .menu {
+        position: absolute;
+        top: calc(100% + 6px);
+        right: 0;
+        min-width: 168px;
+        padding: 6px;
+        border-radius: var(--r-md);
+        background: var(--glass-strong);
+        backdrop-filter: blur(32px) saturate(1.9);
+        -webkit-backdrop-filter: blur(32px) saturate(1.9);
+        border: 1px solid var(--glass-border);
+        box-shadow: 0 12px 36px rgba(10, 20, 40, 0.16);
+        z-index: 40;
+        display: grid;
+        gap: 2px;
+      }
+      .menu[hidden] {
+        display: none;
+      }
+      .menu.up {
+        top: auto;
+        bottom: calc(100% + 8px);
+      }
+      .menu button {
+        appearance: none;
+        border: 0;
+        background: transparent;
+        font: inherit;
+        font-size: 13px;
+        text-align: left;
+        padding: 8px 10px;
+        border-radius: 9px;
+        cursor: pointer;
+        color: var(--text-1);
+      }
+      .menu button:hover {
+        background: var(--accent-soft);
+        color: var(--accent-text);
+      }
+      .menu button.danger:hover {
+        background: var(--danger-bg);
+        color: var(--danger-text);
+      }
+      .menu-trigger {
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+      }
+      .button-chevron {
+        width: 6px;
+        height: 6px;
+        border-right: 1.5px solid currentColor;
+        border-bottom: 1.5px solid currentColor;
+        transform: translateY(-2px) rotate(45deg);
+        transition: transform 0.18s var(--ease);
+      }
+      .menu-trigger[aria-expanded="true"] .button-chevron {
+        transform: translateY(2px) rotate(225deg);
+      }
+
+      /* ---------- 表格 ---------- */
+      .table-card {
+        padding: 6px;
+        overflow: hidden;
+        min-width: 0;
+      }
+      .table-scroll {
+        overflow: auto;
+        max-height: calc(100vh - 260px);
+        border-radius: var(--r-md);
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        font-size: 13.5px;
+      }
+      thead th {
+        position: sticky;
+        top: 0;
+        z-index: 2;
+        background: rgba(250, 251, 253, 0.92);
+        backdrop-filter: blur(12px);
+        -webkit-backdrop-filter: blur(12px);
+        font-size: 12px;
+        font-weight: 500;
+        color: var(--text-3);
+        text-align: left;
+        padding: 10px 12px;
+        border-bottom: 1px solid var(--hairline);
+      }
+      td {
+        padding: 11px 12px;
+        border-bottom: 1px solid var(--hairline);
+        vertical-align: middle;
+      }
+      tbody tr {
+        cursor: pointer;
+        transition: background 0.12s var(--ease);
+      }
+      tbody tr:hover {
+        background: rgba(255, 255, 255, 0.55);
+      }
+      tbody tr.checked {
+        background: var(--accent-soft);
+        box-shadow: inset 3px 0 0 var(--accent);
+      }
+      tbody tr:focus-visible {
+        outline: 2px solid var(--accent);
+        outline-offset: -2px;
+      }
+      td a {
+        color: var(--accent-text);
+        text-decoration: none;
+        font-weight: 500;
+      }
+      td a:hover {
+        text-decoration: underline;
+      }
+      .row-action {
+        min-height: 34px;
+        padding: 5px 9px;
+        font-size: 12.5px;
+        border-radius: 8px;
+      }
+      .row-actions {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        align-items: center;
+      }
+      .empty {
+        text-align: center;
+        padding: 48px 20px !important;
+        color: var(--text-3);
+      }
+      .workspace {
+        display: grid;
+        grid-template-columns: minmax(0, 1fr);
+        align-items: start;
+      }
+      .detail-dialog-actions {
+        display: grid;
+        gap: 8px;
+        margin-top: 16px;
+      }
+      .detail-dialog .dialog-body {
+        padding-top: 0;
+      }
+      .detail-dialog .dialog-title a {
+        color: inherit;
+        text-decoration: none;
+      }
+      .detail-dialog .dialog-title a:hover {
+        color: var(--accent-text);
+        text-decoration: underline;
+      }
+      .repo-button {
+        display: inline-block;
+        color: var(--accent-text);
+        font-weight: 600;
+      }
+
+      /* ---------- 批量操作条 ---------- */
+      .batch-bar {
+        position: fixed;
+        left: 50%;
+        bottom: 26px;
+        transform: translateX(-50%);
+        z-index: 30;
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 14px;
+        border-radius: 999px;
+        box-shadow: 0 16px 48px rgba(10, 20, 40, 0.2);
+        animation: rise 0.24s var(--ease);
+      }
+      .batch-bar[hidden] {
+        display: none;
+      }
+      .batch-count {
+        font-size: 13px;
+        font-weight: 600;
+        padding: 0 4px 0 6px;
+      }
+      .batch-sep {
+        width: 1px;
+        height: 20px;
+        background: var(--hairline);
+      }
+      @keyframes rise {
+        from {
+          opacity: 0;
+          transform: translate(-50%, 12px);
+        }
+        to {
+          opacity: 1;
+          transform: translate(-50%, 0);
+        }
+      }
+
+      /* ---------- Dialog ---------- */
+      .overlay {
+        position: fixed;
+        inset: 0;
+        z-index: 50;
+        background: rgba(15, 23, 42, 0.3);
+        backdrop-filter: blur(8px);
+        -webkit-backdrop-filter: blur(8px);
+        display: grid;
+        place-items: center;
+        padding: 24px;
+        animation: fade 0.18s var(--ease);
+      }
+      .dialog {
+        width: min(560px, 100%);
+        max-height: min(78vh, 760px);
+        display: flex;
+        flex-direction: column;
+        border-radius: var(--r-xl);
+        background: var(--glass-strong);
+        backdrop-filter: blur(36px) saturate(1.9);
+        -webkit-backdrop-filter: blur(36px) saturate(1.9);
+        border: 1px solid var(--glass-border);
+        box-shadow: var(--shadow-dialog);
+        animation: pop 0.22s var(--ease);
+        overflow: hidden;
+      }
+      .dialog.wide {
+        width: min(720px, 100%);
+      }
+      @keyframes fade {
+        from { opacity: 0; }
+      }
+      @keyframes pop {
+        from {
+          opacity: 0;
+          transform: scale(0.96) translateY(8px);
+        }
+      }
+      .dialog-head {
+        display: flex;
+        align-items: flex-start;
+        gap: 12px;
+        padding: 18px 20px 12px;
+      }
+      .dialog-title {
+        font-size: 16px;
+        font-weight: 600;
+        letter-spacing: 0;
+        margin: 0;
+      }
+      .dialog-subtitle {
+        font-size: 12.5px;
+        color: var(--text-2);
+        margin: 3px 0 0;
+        word-break: break-all;
+      }
+      .dialog-close {
+        margin-left: auto;
+        appearance: none;
+        border: 0;
+        width: 28px;
+        height: 28px;
+        border-radius: 50%;
+        background: rgba(0, 0, 0, 0.06);
+        color: var(--text-2);
+        cursor: pointer;
+        flex: none;
+        transition: background 0.15s var(--ease);
+        position: relative;
+      }
+      .dialog-close:hover {
+        background: rgba(0, 0, 0, 0.12);
+      }
+      .dialog-close::before,
+      .dialog-close::after {
+        content: "";
+        position: absolute;
+        top: 50%;
+        left: 50%;
+        width: 12px;
+        height: 1.5px;
+        border-radius: 999px;
+        background: currentColor;
+      }
+      .dialog-close::before { transform: translate(-50%, -50%) rotate(45deg); }
+      .dialog-close::after { transform: translate(-50%, -50%) rotate(-45deg); }
+      .dialog-body {
+        padding: 4px 20px 16px;
+        overflow: auto;
+        font-size: 13.5px;
+        line-height: 1.65;
+      }
+      .dialog-foot {
+        display: flex;
+        justify-content: flex-end;
+        gap: 8px;
+        padding: 12px 20px 16px;
+        border-top: 1px solid var(--hairline);
+        flex-wrap: wrap;
+      }
+      .dialog-foot .left {
+        margin-right: auto;
+      }
+
+      /* ---------- Dialog 内部元素 ---------- */
+      .tabs {
+        display: inline-flex;
+        padding: 3px;
+        border-radius: 999px;
+        background: rgba(0, 0, 0, 0.06);
+        gap: 2px;
+        margin-bottom: 12px;
+      }
+      .tabs button {
+        appearance: none;
+        border: 0;
+        background: transparent;
+        font: inherit;
+        font-size: 12.5px;
+        padding: 5px 14px;
+        border-radius: 999px;
+        cursor: pointer;
+        color: var(--text-2);
+      }
+      .tabs button.active {
+        background: rgba(255, 255, 255, 0.95);
+        color: var(--text-1);
+        font-weight: 500;
+        box-shadow: 0 1px 4px rgba(17, 24, 39, 0.12);
+      }
+      .kv {
+        display: grid;
+        grid-template-columns: 128px 1fr;
+        gap: 6px 14px;
+        margin: 0;
+      }
+      .kv dt {
+        color: var(--text-3);
+        font-size: 12.5px;
+      }
+      .kv dd {
+        margin: 0;
+      }
+      .section-title {
+        font-size: 12px;
+        font-weight: 600;
+        color: var(--text-3);
+        letter-spacing: 0.05em;
+        margin: 16px 0 6px;
+      }
+      .danger-zone {
+        margin-top: 18px;
+        padding: 14px;
+        border-radius: var(--r-md);
+        background: var(--danger-bg);
+        border: 1px solid rgba(255, 59, 48, 0.25);
+      }
+      .danger-zone p {
+        margin: 4px 0 10px;
+        font-size: 12.5px;
+        color: var(--danger-text);
+      }
+      .form-grid {
+        display: grid;
+        gap: 12px;
+      }
+      .form-grid label {
+        display: grid;
+        gap: 5px;
+        font-size: 12.5px;
+        color: var(--text-2);
+      }
+      .form-grid input,
+      .form-grid select {
+        width: 100%;
+      }
+      .rules-form-grid {
+        grid-template-columns: 130px minmax(0, 1fr) minmax(0, 1fr);
+        align-items: end;
+        gap: 10px;
+      }
+      .threshold-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+      }
+      .list-row {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        padding: 10px 12px;
+        border-radius: var(--r-sm);
+        background: rgba(255, 255, 255, 0.6);
+        border: 1px solid var(--hairline);
+        margin-bottom: 8px;
+      }
+      .list-row .name {
+        font-weight: 500;
+      }
+      .result-line {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        padding: 6px 0;
+        border-bottom: 1px solid var(--hairline);
+        font-size: 13px;
+      }
+      .result-line .grow {
+        flex: 1;
+        min-width: 0;
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .history-content {
+        white-space: normal !important;
+        overflow: visible !important;
+        text-overflow: clip !important;
+      }
+      .history-title {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+      }
+      .history-time {
+        display: block;
+        margin-top: 2px;
+        white-space: nowrap;
+      }
+      .mini-btn {
+        appearance: none;
+        border: 1px solid var(--hairline);
+        background: rgba(255, 255, 255, 0.7);
+        border-radius: 999px;
+        font: inherit;
+        font-size: 12px;
+        padding: 3px 10px;
+        cursor: pointer;
+        color: var(--accent-text);
+      }
+      .mini-btn:hover {
+        background: #fff;
+      }
+      .inline-error {
+        color: var(--danger-text);
+      }
+      details.raw {
+        margin-top: 10px;
+        font-size: 12px;
+        color: var(--text-2);
+      }
+      details.raw pre {
+        background: rgba(0, 0, 0, 0.05);
+        border-radius: var(--r-sm);
+        padding: 10px;
+        overflow: auto;
+        font-size: 11.5px;
+      }
+
+      /* ---------- Toast ---------- */
+      .toast-root {
+        position: fixed;
+        right: 20px;
+        bottom: 20px;
+        z-index: 80;
+        display: grid;
+        gap: 10px;
+        justify-items: end;
+      }
+      .toast {
+        display: flex;
+        align-items: center;
+        gap: 9px;
+        max-width: 380px;
+        padding: 11px 16px;
+        border-radius: var(--r-md);
+        background: var(--glass-strong);
+        backdrop-filter: blur(28px) saturate(1.9);
+        -webkit-backdrop-filter: blur(28px) saturate(1.9);
+        border: 1px solid var(--glass-border);
+        box-shadow: 0 12px 36px rgba(10, 20, 40, 0.18);
+        font-size: 13px;
+        animation: toast-in 0.24s var(--ease);
+      }
+      .toast.out {
+        opacity: 0;
+        transform: translateY(6px);
+        transition: all 0.25s var(--ease);
+      }
+      .toast .dot {
+        width: 8px;
+        height: 8px;
+        border-radius: 50%;
+        flex: none;
+        background: var(--accent);
+      }
+      .toast.success .dot {
+        background: #28a745;
+      }
+      .toast.error .dot {
+        background: var(--danger);
+      }
+      @keyframes toast-in {
+        from {
+          opacity: 0;
+          transform: translateY(10px) scale(0.97);
+        }
+      }
+
+      @media (max-width: 720px) {
+        .shell {
+          padding: 16px 12px 120px;
+          width: 100%;
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .topbar {
+          align-items: flex-start;
+          flex-wrap: wrap;
+          gap: 10px;
+          padding: 12px;
+          min-width: 0;
+        }
+        .brand { flex: 1; }
+        .topbar .spacer { display: none; }
+        .topbar .ellipsis {
+          order: 3;
+          max-width: 100%;
+          width: 100%;
+        }
+        .top-actions {
+          order: 2;
+          width: 100%;
+          display: grid;
+          grid-template-columns: auto minmax(0, 1fr);
+        }
+        .top-actions .btn { min-width: 0; }
+        .top-actions .btn-primary { grid-column: 1 / -1; }
+        #search {
+          width: 100%;
+        }
+        .filters { padding: 12px; min-width: 0; }
+        .filter-select-trigger,
+        .filter-select-input,
+        .filter-select-option {
+          min-height: 44px;
+        }
+        .overlay { padding: 12px; }
+        .dialog {
+          max-height: calc(100dvh - 24px);
+          border-radius: var(--r-lg);
+        }
+        .dialog-head { padding: 14px 14px 10px; }
+        .dialog-body { padding: 4px 14px 14px; }
+        .dialog-foot { padding: 10px 14px 14px; }
+        .dialog-close {
+          width: 44px;
+          height: 44px;
+          margin-top: -8px;
+          margin-right: -8px;
+          background: transparent;
+        }
+        .rules-form-grid,
+        .threshold-grid {
+          grid-template-columns: minmax(0, 1fr);
+        }
+        .form-grid input { min-height: 44px; }
+        .list-row {
+          align-items: flex-start;
+          flex-wrap: wrap;
+        }
+        .filters .spacer { display: none; }
+        .workspace { grid-template-columns: minmax(0, 1fr); min-width: 0; }
+        .table-scroll { max-height: none; overflow: visible; }
+        table, tbody, tr, td { display: block; width: 100%; }
+        thead { display: none; }
+        tbody tr {
+          display: grid;
+          grid-template-columns: 1fr;
+          gap: 6px;
+          margin: 8px 0;
+          padding: 12px;
+          border: 1px solid var(--hairline);
+          border-radius: var(--r-md);
+          background: rgba(255, 255, 255, 0.42);
+        }
+        td {
+          display: grid;
+          grid-template-columns: 92px minmax(0, 1fr);
+          gap: 8px;
+          padding: 2px 0;
+          border: 0;
+          overflow-wrap: anywhere;
+        }
+        td::before {
+          content: attr(data-label);
+          color: var(--text-3);
+          font-size: 12px;
+        }
+        td:first-child { grid-template-columns: 1fr; }
+        td:first-child::before { display: none; }
+        .row-actions-cell { display: block; }
+        .row-actions { display: grid; grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); }
+        .row-action { width: 100%; min-height: 40px; }
+        .batch-bar {
+          max-width: calc(100vw - 24px);
+          flex-wrap: wrap;
+          justify-content: center;
+          border-radius: var(--r-lg);
+        }
+      }
+      @media (max-width: 1080px) and (min-width: 721px) {
+        .workspace { grid-template-columns: 1fr; }
+      }
+      @media (prefers-reduced-motion: reduce) {
+        * {
+          animation: none !important;
+          transition: none !important;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <a class="skip-link" href="#workspace">跳至项目工作区</a>
+    <div class="aurora" aria-hidden="true"></div>
+    <main class="shell" id="workspace">
+      <header class="topbar glass">
+        <div class="brand">
+          <span class="brand-mark">⌘</span>GitHub 项目整理
+        </div>
+        <span id="auth" class="badge">检查 gh 状态中…</span>
+        <div class="spacer"></div>
+        <span id="dataPath" class="muted tiny ellipsis"></span>
+        <div class="top-actions">
+          <button id="history" class="btn">动作历史</button>
+          <button id="exportData" class="btn">导出 JSON 备份</button>
+          <button id="scan" class="btn btn-primary">开始扫描</button>
+        </div>
+      </header>
+      <div class="progress" id="progressTrack" hidden><i id="bar"></i></div>
+
+      <section class="filters glass" aria-label="筛选条件">
+        <input id="search" placeholder="搜索 owner/repo" aria-label="搜索 owner/repo" />
+        <div class="filter-select">
+          <select id="signal" aria-label="健康信号筛选">
+            <option value="">全部健康信号</option>
+            <option value="archived">已归档</option>
+            <option value="disabled">已禁用</option>
+            <option value="deprecated">deprecated</option>
+            <option value="no-recent-commit">无近期提交</option>
+            <option value="no-recent-release">无近期 Release</option>
+            <option value="no-recent-activity">无近期 Issue/PR 活动</option>
+          </select>
+        </div>
+        <div class="filter-select">
+          <select id="relation" aria-label="关系筛选">
+            <option value="">全部关系</option>
+            <option value="starred">Star</option>
+            <option value="owned">Owned</option>
+            <option value="fork">Fork</option>
+          </select>
+        </div>
+        <div class="filter-select">
+          <select id="listFilter" aria-label="Lists 筛选">
+            <option value="">全部 Lists</option>
+          </select>
+        </div>
+        <div class="segmented" role="radiogroup" aria-label="视图范围">
+          <label><input type="radio" name="view" value="health" checked />仅健康信号</label>
+          <label><input type="radio" name="view" value="all" />全部项目</label>
+        </div>
+        <div class="spacer"></div>
+        <span id="summary" class="muted tiny"></span>
+        <button id="thresholdsBtn" class="btn">阈值设置</button>
+        <div class="menu-wrap">
+          <button id="listsMenuBtn" class="btn menu-trigger" aria-haspopup="true"><span>Lists</span><span class="button-chevron" aria-hidden="true"></span></button>
+          <div id="listsMenu" class="menu" hidden>
+            <button data-menu="overview">Lists 概览</button>
+            <button data-menu="create">新建 List</button>
+            <button data-menu="rules">维护归类规则</button>
+          </div>
+        </div>
+      </section>
+
+      <div class="workspace">
+        <section class="table-card glass" aria-label="项目条目表格">
+          <div class="table-scroll">
+            <table>
+              <thead>
+                <tr>
+                  <th style="width: 36px">选择</th>
+                  <th>项目条目</th>
+                  <th>关系</th>
+                  <th>最近 commit</th>
+                  <th>Lists</th>
+                  <th>健康信号</th>
+                  <th><span class="sr-only">可用操作</span></th>
+                </tr>
+              </thead>
+              <tbody id="rows">
+                <tr>
+                  <td colspan="7" class="empty">尚未扫描。点击「开始扫描」读取项目条目。</td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </section>
+      </div>
+    </main>
+
+    <div id="batchBar" class="batch-bar glass-strong" hidden>
+      <span class="batch-count" id="batchCount">已选 0 项</span>
+      <span class="batch-sep"></span>
+      <button id="preview" class="btn btn-primary">批量预览取消 Star</button>
+      <button id="lifecyclePreview" class="btn" hidden>仓库生命周期</button>
+      <div id="listOpWrap" class="menu-wrap" hidden>
+        <button id="listOpBtn" class="btn menu-trigger" aria-haspopup="true"><span>List 操作</span><span class="button-chevron" aria-hidden="true"></span></button>
+        <div id="listOpMenu" class="menu up" hidden>
+          <button data-op="assign">归类到 List</button>
+          <button data-op="remove">移出 List</button>
+        </div>
+      </div>
+    </div>
+
+    <div id="dialogRoot"></div>
+    <div id="toastRoot" class="toast-root" aria-live="polite"></div>
+
+    <script>
+      const $ = (id) => document.getElementById(id);
+      let data = null,
+        preview = null,
+        activeDetailDialog = null,
+        listPreview = null;
+      const selectedNames = new Set();
+
+      const esc = (v) =>
+        String(v ?? "").replace(
+          /[&<>"']/g,
+          (c) =>
+            ({
+              "&": "&amp;",
+              "<": "&lt;",
+              ">": "&gt;",
+              '"': "&quot;",
+              "'": "&#39;",
+            })[c]
+        );
+
+      /* ---------- Toast ---------- */
+      function toast(message, type = "info", timeout = 4200) {
+        const el = document.createElement("div");
+        el.className = "toast " + type;
+        el.innerHTML = '<span class="dot"></span><span>' + message + "</span>";
+        el.onclick = () => dismiss();
+        $("toastRoot").appendChild(el);
+        const timer = setTimeout(dismiss, timeout);
+        function dismiss() {
+          clearTimeout(timer);
+          el.classList.add("out");
+          setTimeout(() => el.remove(), 260);
+        }
+      }
+      const toastError = (e) =>
+        toast(esc(e?.message || String(e) || "操作失败"), "error", 6000);
+
+      /* ---------- Dialog 框架 ---------- */
+      function openDialog({ title, subtitle = "", body = "", actions = [], wide = false, onClose }) {
+        const previousFocus = document.activeElement;
+        const overlay = document.createElement("div");
+        overlay.className = "overlay";
+        const dialog = document.createElement("div");
+        dialog.className = "dialog" + (wide ? " wide" : "");
+        dialog.setAttribute("role", "dialog");
+        dialog.setAttribute("aria-modal", "true");
+        dialog.setAttribute("aria-label", title);
+        const head = document.createElement("div");
+        head.className = "dialog-head";
+        head.innerHTML =
+          "<div><h2 class='dialog-title'>" + esc(title) + "</h2>" +
+          (subtitle ? "<p class='dialog-subtitle'>" + subtitle + "</p>" : "") +
+          "</div><button class='dialog-close' aria-label='关闭'></button>";
+        const bodyEl = document.createElement("div");
+        bodyEl.className = "dialog-body";
+        if (typeof body === "string") bodyEl.innerHTML = body;
+        else bodyEl.appendChild(body);
+        const foot = document.createElement("div");
+        foot.className = "dialog-foot";
+        dialog.append(head, bodyEl);
+        overlay.appendChild(dialog);
+        function close() {
+          overlay.remove();
+          document.removeEventListener("keydown", onKey);
+          onClose?.();
+          previousFocus?.focus?.();
+        }
+        for (const action of actions) {
+          const btn = document.createElement("button");
+          btn.className =
+            "btn" +
+            (action.kind === "primary" ? " btn-primary" : action.kind === "danger" ? " btn-danger" : "") +
+            (action.left ? " left" : "");
+          btn.innerHTML = action.label;
+          btn.disabled = !!action.disabled;
+          btn.onclick = () => action.handler?.({ close, btn, body: bodyEl });
+          foot.appendChild(btn);
+        }
+        if (actions.length) dialog.appendChild(foot);
+        head.querySelector(".dialog-close").onclick = close;
+        overlay.addEventListener("mousedown", (e) => {
+          if (e.target === overlay) close();
+        });
+        function onKey(e) {
+          if (e.key === "Escape") close();
+          if (e.key === "Tab") {
+            const focusables = [...dialog.querySelectorAll('button:not(:disabled), input:not(:disabled), select:not(:disabled), textarea:not(:disabled), a[href]')];
+            if (!focusables.length) return;
+            const first = focusables[0], last = focusables.at(-1);
+            if (e.shiftKey && document.activeElement === first) { e.preventDefault(); last.focus(); }
+            if (!e.shiftKey && document.activeElement === last) { e.preventDefault(); first.focus(); }
+          }
+        }
+        document.addEventListener("keydown", onKey);
+        $("dialogRoot").appendChild(overlay);
+        enhanceFormControls(bodyEl);
+        const focusable =
+          bodyEl.querySelector(".filter-select-trigger,input:not([hidden]),select:not([hidden]),textarea") ||
+          foot.querySelector(".btn-primary") ||
+          head.querySelector(".dialog-close");
+        focusable?.focus();
+        return { close, el: dialog, body: bodyEl, foot };
+      }
+
+      /* ---------- 菜单 ---------- */
+      function setupMenu(btnId, menuId) {
+        const btn = $(btnId), menu = $(menuId);
+        btn.setAttribute("aria-controls", menuId);
+        btn.setAttribute("aria-expanded", "false");
+        btn.onclick = (e) => {
+          e.stopPropagation();
+          const shouldOpen = menu.hidden;
+          closeMenus(menu);
+          closeFilterSelects();
+          menu.hidden = !shouldOpen;
+          btn.setAttribute("aria-expanded", String(shouldOpen));
+        };
+        menu.addEventListener("click", () => {
+          menu.hidden = true;
+          btn.setAttribute("aria-expanded", "false");
+        });
+      }
+      const enhancedSelects = new Map();
+      function closeFilterSelects(except = null) {
+        for (const [key, controller] of enhancedSelects) {
+          if (!controller.root.isConnected) {
+            controller.destroy();
+            enhancedSelects.delete(key);
+          } else if (controller !== except) {
+            controller.close();
+          }
+        }
+      }
+      let enhancedSelectUid = 0;
+      function controlLabel(control, fallback) {
+        const explicit = control.getAttribute("aria-label");
+        if (explicit) return explicit;
+        const label = control.closest("label");
+        return label?.firstChild?.textContent?.trim() || fallback;
+      }
+      function createSelectRoot(control) {
+        let root = control.closest(".filter-select");
+        if (root) return root;
+        root = document.createElement("div");
+        root.className = "filter-select form-select";
+        control.before(root);
+        root.appendChild(control);
+        return root;
+      }
+      function positionSelectOptions(trigger, listbox) {
+        const rect = trigger.getBoundingClientRect();
+        const gap = 7;
+        const edge = 12;
+        const below = window.innerHeight - rect.bottom - edge - gap;
+        const above = rect.top - edge - gap;
+        const available = Math.max(96, Math.min(360, Math.max(below, above)));
+        listbox.style.minWidth = rect.width + "px";
+        listbox.style.maxHeight = available + "px";
+        listbox.style.left = edge + "px";
+        listbox.style.left = Math.max(edge, Math.min(rect.left, window.innerWidth - listbox.offsetWidth - edge)) + "px";
+        if (below >= Math.min(listbox.offsetHeight, 180) || below >= above) {
+          listbox.style.top = rect.bottom + gap + "px";
+        } else {
+          listbox.style.top = Math.max(edge, rect.top - listbox.offsetHeight - gap) + "px";
+        }
+      }
+      function enhanceSelect(select) {
+        if (!select || select.dataset.enhancedSelect) return null;
+        const root = createSelectRoot(select);
+        const id = select.id || "enhancedSelect" + ++enhancedSelectUid;
+        const label = controlLabel(select, "选择选项");
+        enhancedSelects.get(id)?.destroy();
+        enhancedSelects.delete(id);
+        select.dataset.enhancedSelect = "true";
+
+        const trigger = document.createElement("button");
+        trigger.type = "button";
+        trigger.className = "filter-select-trigger";
+        trigger.setAttribute("role", "combobox");
+        trigger.setAttribute("aria-haspopup", "listbox");
+        trigger.setAttribute("aria-expanded", "false");
+        trigger.setAttribute("aria-label", label);
+        trigger.innerHTML = '<span class="filter-select-label"></span><span class="filter-select-chevron" aria-hidden="true"></span>';
+
+        const listbox = document.createElement("div");
+        listbox.className = "filter-select-options";
+        listbox.id = id + "Options" + ++enhancedSelectUid;
+        listbox.setAttribute("role", "listbox");
+        listbox.setAttribute("aria-label", label + "选项");
+        listbox.hidden = true;
+        trigger.setAttribute("aria-controls", listbox.id);
+        select.hidden = true;
+        root.append(trigger);
+        (root.closest(".overlay") || document.body).appendChild(listbox);
+
+        const optionElements = () => [...listbox.querySelectorAll('[role="option"]')];
+        let activeIndex = -1;
+        function sync() {
+          const selectedOption = select.selectedOptions[0] || select.options[0];
+          trigger.querySelector(".filter-select-label").textContent = selectedOption?.textContent || "";
+          listbox.replaceChildren(
+            ...[...select.options].map((option, index) => {
+              const item = document.createElement("div");
+              item.className = "filter-select-option";
+              item.id = id + "Option" + enhancedSelectUid + "-" + index;
+              item.dataset.value = option.value;
+              item.setAttribute("role", "option");
+              item.setAttribute("aria-selected", String(option.value === select.value));
+              item.textContent = option.textContent;
+              return item;
+            })
+          );
+        }
+        function close() {
+          listbox.hidden = true;
+          root.classList.remove("open");
+          trigger.setAttribute("aria-expanded", "false");
+          trigger.removeAttribute("aria-activedescendant");
+          activeIndex = -1;
+        }
+        function activateOption(index) {
+          const options = optionElements();
+          if (!options.length) return;
+          activeIndex = Math.max(0, Math.min(index, options.length - 1));
+          options.forEach((option, optionIndex) => option.toggleAttribute("data-active", optionIndex === activeIndex));
+          trigger.setAttribute("aria-activedescendant", options[activeIndex].id);
+          options[activeIndex].scrollIntoView({ block: "nearest" });
+        }
+        function open(focusTarget = "") {
+          closeMenus();
+          closeFilterSelects(controller);
+          listbox.hidden = false;
+          root.classList.add("open");
+          trigger.setAttribute("aria-expanded", "true");
+          positionSelectOptions(trigger, listbox);
+          if (focusTarget) {
+            const options = optionElements();
+            const selectedIndex = Math.max(0, options.findIndex((option) => option.getAttribute("aria-selected") === "true"));
+            activateOption(focusTarget === "first" ? 0 : focusTarget === "last" ? options.length - 1 : selectedIndex);
+          }
+        }
+        function choose(option) {
+          select.value = option.dataset.value;
+          sync();
+          close();
+          trigger.focus();
+          select.dispatchEvent(new Event("input", { bubbles: true }));
+          select.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+
+        const controller = { root, close, sync, destroy: () => listbox.remove() };
+        enhancedSelects.set(id, controller);
+        sync();
+
+        trigger.addEventListener("click", (event) => {
+          event.stopPropagation();
+          if (listbox.hidden) open();
+          else close();
+        });
+        trigger.addEventListener("keydown", (event) => {
+          const options = optionElements();
+          if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+            event.preventDefault();
+            if (listbox.hidden) open("selected");
+            else activateOption(activeIndex + (event.key === "ArrowDown" ? 1 : -1));
+          } else if (event.key === "Home" || event.key === "End") {
+            event.preventDefault();
+            if (listbox.hidden) open(event.key === "Home" ? "first" : "last");
+            else activateOption(event.key === "Home" ? 0 : options.length - 1);
+          } else if ((event.key === "Enter" || event.key === " ") && !listbox.hidden) {
+            event.preventDefault();
+            if (activeIndex >= 0) choose(options[activeIndex]);
+          } else if (event.key === "Escape" && !listbox.hidden) {
+            event.preventDefault();
+            event.stopPropagation();
+            close();
+          } else if (event.key === "Tab") {
+            close();
+          }
+        });
+        listbox.addEventListener("click", (event) => {
+          event.stopPropagation();
+          const option = event.target.closest('[role="option"]');
+          if (option) choose(option);
+        });
+        return controller;
+      }
+      function enhanceDatalistInput(input) {
+        if (!input || input.dataset.enhancedSelect) return null;
+        const datalistId = input.getAttribute("list");
+        const datalist = $(datalistId);
+        if (!datalist) return null;
+        const root = createSelectRoot(input);
+        const id = input.id || "enhancedCombobox" + ++enhancedSelectUid;
+        const key = "input:" + id;
+        const label = controlLabel(input, "选择选项");
+        enhancedSelects.get(key)?.destroy();
+        enhancedSelects.delete(key);
+        input.dataset.enhancedSelect = "true";
+        input.dataset.datalistId = datalistId;
+        input.removeAttribute("list");
+        input.classList.add("filter-select-input");
+        input.setAttribute("role", "combobox");
+        input.setAttribute("aria-autocomplete", "list");
+        input.setAttribute("aria-expanded", "false");
+
+        const chevron = document.createElement("span");
+        chevron.className = "filter-select-chevron";
+        chevron.setAttribute("aria-hidden", "true");
+        const listbox = document.createElement("div");
+        listbox.className = "filter-select-options";
+        listbox.id = id + "Options" + ++enhancedSelectUid;
+        listbox.setAttribute("role", "listbox");
+        listbox.setAttribute("aria-label", label + "选项");
+        listbox.hidden = true;
+        input.setAttribute("aria-controls", listbox.id);
+        root.appendChild(chevron);
+        (root.closest(".overlay") || document.body).appendChild(listbox);
+
+        let activeIndex = -1;
+        const optionElements = () => [...listbox.querySelectorAll('[role="option"]')];
+        const allValues = () => [...datalist.options].map((option) => option.value).filter(Boolean);
+        function sync(queryValue = input.value) {
+          const query = queryValue.trim().toLocaleLowerCase("zh-CN");
+          const values = allValues().filter((value) => !query || value.toLocaleLowerCase("zh-CN").includes(query));
+          if (!values.length) {
+            const empty = document.createElement("div");
+            empty.className = "filter-select-empty";
+            empty.textContent = "没有匹配的 List";
+            listbox.replaceChildren(empty);
+          } else {
+            listbox.replaceChildren(...values.map((value, index) => {
+              const option = document.createElement("div");
+              option.className = "filter-select-option";
+              option.id = id + "Option" + enhancedSelectUid + "-" + index;
+              option.dataset.value = value;
+              option.setAttribute("role", "option");
+              option.setAttribute("aria-selected", String(value === input.value));
+              option.textContent = value;
+              return option;
+            }));
+          }
+          activeIndex = -1;
+          input.removeAttribute("aria-activedescendant");
+        }
+        function close() {
+          listbox.hidden = true;
+          root.classList.remove("open");
+          input.setAttribute("aria-expanded", "false");
+          input.removeAttribute("aria-activedescendant");
+          activeIndex = -1;
+        }
+        function activateOption(index) {
+          const options = optionElements();
+          if (!options.length) return;
+          activeIndex = Math.max(0, Math.min(index, options.length - 1));
+          options.forEach((option, optionIndex) => option.toggleAttribute("data-active", optionIndex === activeIndex));
+          input.setAttribute("aria-activedescendant", options[activeIndex].id);
+          options[activeIndex].scrollIntoView({ block: "nearest" });
+        }
+        function open(preferred = "", showAll = false) {
+          sync(showAll ? "" : input.value);
+          closeMenus();
+          closeFilterSelects(controller);
+          listbox.hidden = false;
+          root.classList.add("open");
+          input.setAttribute("aria-expanded", "true");
+          positionSelectOptions(input, listbox);
+          if (preferred && optionElements().length) activateOption(preferred === "last" ? optionElements().length - 1 : 0);
+        }
+        function choose(option) {
+          input.value = option.dataset.value;
+          close();
+          input.focus();
+          input.dispatchEvent(new Event("change", { bubbles: true }));
+        }
+        const controller = { root, close, sync, destroy: () => listbox.remove() };
+        enhancedSelects.set(key, controller);
+        input.addEventListener("click", (event) => {
+          event.stopPropagation();
+          if (listbox.hidden) open("", true);
+        });
+        input.addEventListener("input", () => open());
+        input.addEventListener("keydown", (event) => {
+          const options = optionElements();
+          if (event.key === "ArrowDown" || event.key === "ArrowUp") {
+            event.preventDefault();
+            if (listbox.hidden) open(event.key === "ArrowUp" ? "last" : "first");
+            else activateOption(activeIndex + (event.key === "ArrowDown" ? 1 : -1));
+          } else if (event.key === "Home" || event.key === "End") {
+            if (listbox.hidden) return;
+            event.preventDefault();
+            activateOption(event.key === "Home" ? 0 : options.length - 1);
+          } else if (event.key === "Enter" && !listbox.hidden && activeIndex >= 0) {
+            event.preventDefault();
+            choose(options[activeIndex]);
+          } else if (event.key === "Escape" && !listbox.hidden) {
+            event.preventDefault();
+            event.stopPropagation();
+            close();
+          } else if (event.key === "Tab") {
+            close();
+          }
+        });
+        listbox.addEventListener("click", (event) => {
+          event.stopPropagation();
+          const option = event.target.closest('[role="option"]');
+          if (option) choose(option);
+        });
+        return controller;
+      }
+      function enhanceFormControls(root = document) {
+        root.querySelectorAll("select:not([data-enhanced-select])").forEach(enhanceSelect);
+        root.querySelectorAll('input[list]:not([data-enhanced-select])').forEach(enhanceDatalistInput);
+      }
+      document.addEventListener("click", () => {
+        closeMenus();
+        closeFilterSelects();
+      });
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape") {
+          closeMenus();
+          closeFilterSelects();
+        }
+      });
+      window.addEventListener("resize", () => closeFilterSelects());
+
+      /* ---------- 数据 ---------- */
+      async function actionRequest(path, body) {
+        const r = await fetch(path, {
+          method: "POST",
+          headers: { "content-type": "application/json" },
+          body: JSON.stringify(body),
+        });
+        const value = await r.json().catch(() => ({}));
+        if (!r.ok) throw new Error(value.error || "动作请求失败");
+        return value;
+      }
+      async function pollScanProgress() {
+        try {
+          const response = await fetch("/api/progress");
+          if (!response.ok) return;
+          const progress = await response.json();
+          if (Number.isFinite(progress.percent)) $("bar").style.width = Math.max(0, Math.min(100, progress.percent)) + "%";
+        } catch {
+          // 进度轮询是辅助显示，服务短暂不可用时不应中断扫描请求。
+        }
+      }
+      async function refreshScan() {
+        const [scanResponse, statusResponse] = await Promise.all([fetch("/api/scan"), fetch("/api/status")]);
+        data = await scanResponse.json();
+        data.auth = await statusResponse.json();
+        render();
+      }
+      function formatDateTime(value) {
+        if (!value) return "无记录";
+        const date = new Date(value);
+        if (Number.isNaN(date.getTime())) return value;
+        return new Intl.DateTimeFormat("zh-CN", {
+          timeZone: "Asia/Shanghai",
+          year: "numeric",
+          month: "2-digit",
+          day: "2-digit",
+          hour: "2-digit",
+          minute: "2-digit",
+          second: "2-digit",
+          hourCycle: "h23",
+        }).format(date);
+      }
+      function existingLists() {
+        return [...new Set([
+          ...(data?.lists || []).map((list) => list.name),
+          ...(data?.items || []).flatMap((item) => item.lists || []),
+        ].filter(Boolean))];
+      }
+      function filtered() {
+        const q = $("search").value.trim().toLowerCase(),
+          sig = $("signal").value,
+          rel = $("relation").value,
+          list = $("listFilter").value,
+          all = document.querySelector("input[name=view]:checked")?.value === "all";
+        return (data?.items || []).filter(
+          (i) =>
+            (all || i.healthSignals?.length) &&
+            (!q || i.fullName.toLowerCase().includes(q)) &&
+            (!sig || i.healthSignals?.some((s) => s.code === sig)) &&
+            (!rel || i.relation?.[rel]) &&
+            (!list || i.lists?.includes(list))
+        );
+      }
+      function selectedActions() {
+        return selectedItems()
+          .filter((item) => item.relation?.starred)
+          .map((item) => ({ fullName: item.fullName, action: "unstar" }));
+      }
+      function selectedItems() {
+        const byName = new Map((data?.items || []).map((item) => [item.fullName, item]));
+        return [...selectedNames].map((name) => byName.get(name)).filter(Boolean);
+      }
+      function clearSelection() {
+        selectedNames.clear();
+      }
+      function pruneSelection() {
+        const names = new Set((data?.items || []).map((item) => item.fullName));
+        for (const name of selectedNames) if (!names.has(name)) selectedNames.delete(name);
+      }
+      function rowActionsHtml(item) {
+        const actions = [];
+        if (item.relation?.starred) {
+          actions.push('<button class="btn row-action" data-row-action="unstar" data-name="' + esc(item.fullName) + '">取消 Star</button>');
+          actions.push('<button class="btn row-action" data-row-action="assign" data-name="' + esc(item.fullName) + '">归类到 List</button>');
+          if (item.lists?.[0]) actions.push('<button class="btn row-action" data-row-action="remove" data-name="' + esc(item.fullName) + '">移出「' + esc(item.lists[0]) + '」</button>');
+        }
+        if (item.relation?.owned) {
+          actions.push('<button class="btn row-action" data-row-action="' + (item.archived ? "unarchive" : "archive") + '" data-name="' + esc(item.fullName) + '">' + (item.archived ? "Unarchive 仓库" : "Archive 仓库") + '</button>');
+        }
+        if (!actions.length) return '<span class="muted tiny">暂无可用操作</span>';
+        return '<div class="row-actions" aria-label="' + esc(item.fullName) + ' 的可用操作">' + actions.join("") + "</div>";
+      }
+      function closeMenus(except = null) {
+        document.querySelectorAll(".menu").forEach((menu) => {
+          if (menu !== except) {
+            menu.hidden = true;
+            menu.previousElementSibling?.setAttribute("aria-expanded", "false");
+          }
+        });
+      }
+      async function runRowAction(fullName, action) {
+        const item = (data?.items || []).find((entry) => entry.fullName === fullName);
+        if (!item) return toast("项目已不在最近扫描结果中，请重新扫描后再试。", "error");
+        try {
+          if (action === "unstar") {
+            const nextPreview = await actionRequest("/api/actions/preview", { selections: [{ fullName, action }] });
+            if (nextPreview.status === "no-scan") throw new Error("暂无扫描结果");
+            return openPreviewDialog(nextPreview);
+          }
+          if (action === "assign") return openListActionDialog("assign", [fullName]);
+          if (action === "remove") return openListActionDialog("remove", [fullName], item.lists?.[0] || "");
+          if (["archive", "unarchive"].includes(action)) return openLifecycleConfirmDialog(item, action);
+        } catch (error) {
+          toastError(error);
+        }
+      }
+
+      /* ---------- 主渲染 ---------- */
+      function render() {
+        if (!data) return;
+        pruneSelection();
+        const a = data.auth || {};
+        $("auth").textContent =
+          a.state === "authenticated" ? "gh 已认证"
+          : a.state === "not-installed" ? "gh 未安装"
+          : a.state === "not-logged-in" ? "gh 未登录"
+          : "认证不可用";
+        $("auth").className = "badge " + (a.state === "authenticated" ? "ok" : "bad");
+        $("scan").disabled = a.state !== "authenticated";
+        $("preview").disabled = a.state !== "authenticated";
+        if (data.summary)
+          $("summary").textContent = "成功 " + data.summary.success + " · 失败 " + data.summary.failed;
+        if (data.progress) $("bar").style.width = (data.progress.percent || 0) + "%";
+        const lists = existingLists(),
+          current = $("listFilter").value;
+        $("listFilter").innerHTML =
+          '<option value="">全部 Lists</option>' +
+          lists.map((l) => '<option value="' + esc(l) + '">' + esc(l) + "</option>").join("");
+        $("listFilter").value = lists.includes(current) ? current : "";
+        enhancedSelects.get("listFilter")?.sync();
+        $("rows").innerHTML =
+          filtered()
+            .map((i) => {
+              const selected = selectedNames.has(i.fullName);
+              return '<tr data-name="' + esc(i.fullName) + '" tabindex="0" aria-label="查看 ' + esc(i.fullName) + ' 详情"' + (selected ? ' class="checked"' : '') + '>' +
+                '<td data-label="选择"><input type="checkbox" data-name="' + esc(i.fullName) + '" aria-label="选择 ' + esc(i.fullName) + '"' + (selected ? ' checked' : '') + '></td>' +
+                '<td data-label="项目条目"><a class="repo-button" href="' + esc(i.url) + '" target="_blank" rel="noreferrer" aria-label="前往 GitHub 项目 ' + esc(i.fullName) + '">' + esc(i.fullName) + '</a></td>' +
+                '<td data-label="关系">' + (esc([i.relation?.starred && "Star", i.relation?.owned && "Owned", i.relation?.fork && "Fork"].filter(Boolean).join(" · ")) || "—") + '</td>' +
+                '<td data-label="最近 commit" class="muted">' + esc(i.latestCommitAt ? formatDateTime(i.latestCommitAt) : "无记录") + '</td>' +
+                '<td data-label="Lists">' + ((i.lists || []).map((l) => '<span class="chip-list">' + esc(l) + '</span>').join("") || '<span class="muted">—</span>') + (i.listConflict ? '<span class="inline-error tiny">远端多归类待修正</span>' : '') + '</td>' +
+                '<td data-label="健康信号">' + ((i.healthSignals || []).map((s) => '<span class="signal">' + esc(s.label) + '</span>').join("") || '<span class="muted tiny">健康</span>') + '</td>' +
+                '<td class="row-actions-cell" data-label="可用操作">' + rowActionsHtml(i) + '</td></tr>';
+            })
+            .join("") ||
+          '<tr><td colspan="7" class="empty">没有符合当前筛选条件的项目条目。</td></tr>';
+        $("rows").querySelectorAll("tr[data-name]").forEach((r) => {
+          const name = r.dataset.name;
+          const box = r.querySelector("input[type=checkbox]");
+          box.onchange = () => {
+            if (box.checked) selectedNames.add(name); else {
+              selectedNames.delete(name);
+            }
+            r.classList.toggle("checked", box.checked);
+            updateBatchBar();
+          };
+          r.onclick = (event) => {
+            if (event.target.closest("a, button, input, select, textarea")) return;
+            openDetailDialog(name);
+          };
+          r.onkeydown = (event) => {
+            if ((event.key === "Enter" || event.key === " ") && event.target === r) {
+              event.preventDefault();
+              openDetailDialog(name);
+            }
+          };
+        });
+        $("rows").querySelectorAll("[data-row-action]").forEach((button) => {
+          button.onclick = (event) => {
+            event.stopPropagation();
+            runRowAction(button.dataset.name, button.dataset.rowAction);
+          };
+        });
+        updateBatchBar();
+        refreshDetailDialog();
+      }
+
+      function updateBatchBar() {
+        const n = selectedNames.size;
+        const selected = selectedItems();
+        const actionCount = selectedActions().length;
+        $("batchBar").hidden = n === 0;
+        $("batchCount").textContent = "已选 " + n + " 项" + (actionCount ? " · 可批量取消 " + actionCount + " 个 Star" : "");
+        $("preview").hidden = actionCount === 0;
+        $("listOpWrap").hidden = !selected.some((item) => item.relation?.starred);
+        $("lifecyclePreview").hidden = !selected.some((item) => item.relation?.owned);
+      }
+
+      /* ---------- 详情 Dialog ---------- */
+      function detailTabHtml(item, tab) {
+        const e = item.evidence || {};
+        if (tab === "evidence") {
+          return (
+            '<dl class="kv">' +
+            "<dt>archived</dt><dd>" + (e.status?.archived ? "是" : "否") + "</dd>" +
+            "<dt>disabled</dt><dd>" + (e.status?.disabled ? "是" : "否") + "</dd>" +
+            "<dt>deprecated</dt><dd>" + (e.status?.deprecated ? "是" : "否") + "</dd>" +
+            "<dt>最近 commit</dt><dd>" + esc(formatDateTime(e.latestCommitAt)) + "</dd>" +
+            "<dt>最近 release</dt><dd>" + esc(formatDateTime(e.latestReleaseAt)) + "</dd>" +
+            "<dt>最近 Issue/PR 活动</dt><dd>" + esc(formatDateTime(e.latestActivityAt)) + "</dd>" +
+            "</dl>" +
+            '<p class="section-title">命中原因</p><p>' +
+            esc((item.recommendation?.reasons || []).join("、") || "暂无") +
+            '</p><p class="muted tiny">建议仅供确认，archived/deprecated 不会自动执行写操作。</p>'
+          );
+        }
+        return (
+          "<p><span class='badge'>优先级 " + esc(item.recommendation?.priority || item.priority || "—") + "</span></p>" +
+          "<p>" + esc(item.recommendation?.summary || "") + "</p>" +
+          '<p class="section-title">当前 Lists</p><p>' +
+          ((item.lists || []).map((l) => '<span class="chip-list">' + esc(l) + "</span>").join("") || '<span class="muted">未归类</span>') +
+          "</p>" +
+          (item.listConflict ? '<p class="inline-error">远端仍同时属于：' + esc(item.listConflict.remoteLists.join("、")) + '。请选择「归类到 List」并确认，以保留唯一归类。</p>' : '') +
+          '<p class="section-title">归类建议与命中依据</p>' +
+          ((item.listSuggestions || [])
+            .map((s) => '<div class="result-line"><span class="grow">' + esc(s.targetList) + "：命中 " + esc(s.matchedField) + " = " + esc(s.matchedValue) + "</span></div>")
+            .join("") || '<p class="muted">暂无规则命中</p>')
+        );
+      }
+
+      function refreshDetailDialog() {
+        if (!activeDetailDialog) return;
+        const item = (data?.items || []).find((entry) => entry.fullName === activeDetailDialog.fullName);
+        if (!item) activeDetailDialog.close();
+      }
+      function openDetailDialog(fullName) {
+        const item = (data?.items || []).find((entry) => entry.fullName === fullName);
+        if (!item) return;
+        const dlg = openDialog({
+          title: item.fullName,
+          wide: true,
+          body:
+            '<div class="tabs"><button class="active" data-detail-tab="overview">概览</button><button data-detail-tab="evidence">完整证据</button></div>' +
+            '<div id="detailPane"></div>' +
+            '<div class="detail-dialog-actions">' +
+            (item.relation?.starred ? '<button class="btn btn-primary" data-detail-list="assign">归类到 List</button><button class="btn" data-detail-unstar>预览取消 Star</button>' : '') +
+            '</div>',
+          onClose: () => {
+            if (activeDetailDialog?.el === dlg.el) activeDetailDialog = null;
+          },
+        });
+        activeDetailDialog = { ...dlg, fullName };
+        dlg.el.classList.add("detail-dialog");
+        const title = dlg.el.querySelector(".dialog-title");
+        title.innerHTML = '<a href="' + esc(item.url) + '" target="_blank" rel="noreferrer" aria-label="前往 GitHub 项目 ' + esc(item.fullName) + '">' + esc(item.fullName) + "</a>";
+        const pane = dlg.body.querySelector("#detailPane");
+        function paint(tab) {
+          pane.innerHTML = detailTabHtml(item, tab);
+          if (tab === "overview" && item.relation?.owned) {
+            const zone = document.createElement("div");
+            zone.className = "danger-zone";
+            zone.innerHTML =
+              "<strong>高级仓库操作</strong><p>删除不可由本工具恢复。执行前将展示完整身份与健康证据。</p>" +
+              '<button class="btn" data-life="archive">Archive…</button> ' +
+              '<button class="btn" data-life="unarchive">Unarchive…</button> ' +
+              '<button class="btn btn-danger" data-life="delete">删除仓库…</button>';
+            pane.appendChild(zone);
+            zone.querySelectorAll("[data-life]").forEach((button) => {
+              button.onclick = () => {
+                dlg.close();
+                openLifecycleConfirmDialog(item, button.dataset.life);
+              };
+            });
+          }
+        }
+        dlg.body.querySelectorAll("[data-detail-tab]").forEach((button) => {
+          button.onclick = () => {
+            dlg.body.querySelectorAll("[data-detail-tab]").forEach((entry) => entry.classList.toggle("active", entry === button));
+            paint(button.dataset.detailTab);
+          };
+        });
+        dlg.body.querySelector("[data-detail-list]")?.addEventListener("click", () => {
+          dlg.close();
+          openListActionDialog("add", [item.fullName]);
+        });
+        dlg.body.querySelector("[data-detail-unstar]")?.addEventListener("click", async () => {
+          try {
+            const nextPreview = await actionRequest("/api/actions/preview", { selections: [{ fullName: item.fullName, action: "unstar" }] });
+            if (nextPreview.status === "no-scan") throw new Error("暂无扫描结果");
+            dlg.close();
+            openPreviewDialog(nextPreview);
+          } catch (error) {
+            toastError(error);
+          }
+        });
+        paint("overview");
+      }
+
+      /* ---------- 批量预览 Dialog ---------- */
+      function describeInvalid(invalid = []) {
+        return invalid
+          .map(
+            (item) =>
+              '<p class="inline-error">' + esc(item.fullName || item.project || "所选项目") +
+              "：" + esc(item.reason || "当前操作不可执行") + "</p>"
+          )
+          .join("");
+      }
+      function openPreviewDialog(p) {
+        preview = p;
+        const dlg = openDialog({
+          title: "批量预览",
+          subtitle: "请分别确认每组动作，筛选不会自动执行。",
+          wide: true,
+          body: "",
+          actions: [
+            { label: "", kind: "primary", handler: ({ btn }) => confirmGroup("unstar", btn, dlg) },
+            { label: "", handler: ({ btn }) => confirmGroup("keep", btn, dlg) },
+            { label: "关闭", handler: ({ close }) => close() },
+          ],
+        });
+        const unstarAction = dlg.foot.children[0],
+          keepAction = dlg.foot.children[1];
+        function paint() {
+          dlg.body.innerHTML =
+            "<p class='section-title'>取消 Star（" + preview.groups.unstar.length + "）</p><p>" +
+            esc(preview.groups.unstar.map((x) => x.fullName).join("、") || "无") +
+            "</p><p class='section-title'>保留当前关系（" + preview.groups.keep.length + "）</p><p>" +
+            esc(preview.groups.keep.map((x) => x.fullName).join("、") || "无") +
+            "</p>" + describeInvalid(preview.invalid);
+          unstarAction.textContent = "确认取消 Star（" + preview.groups.unstar.length + "）";
+          keepAction.textContent = "确认保留（" + preview.groups.keep.length + "）";
+          unstarAction.disabled = !preview.groups.unstar.length;
+          keepAction.disabled = !preview.groups.keep.length;
+        }
+        paint();
+      }
+      async function confirmGroup(action, btn, dlg) {
+        if (!preview) return;
+        const group = preview.groups[action] || [];
+        if (!group.length) return;
+        btn.disabled = true;
+        try {
+          const result = await actionRequest("/api/actions/confirm", {
+            previewId: preview.id,
+            actions: group,
+          });
+          dlg.body.innerHTML =
+            "<p><strong>已执行 " + esc(action) + "</strong>：成功 " + result.summary.success +
+            "，失败 " + result.summary.failed + "。</p>" +
+            result.results
+              .map((x) =>
+                x.status === "failed"
+                  ? '<div class="result-line"><span class="grow inline-error">' + esc(x.fullName) + "：" + esc(x.reason) +
+                    '</span><button class="mini-btn" data-retry-preview="' + esc(x.fullName) + '">重新预览</button></div>'
+                  : x.action === "unstar"
+                    ? '<div class="result-line"><span class="grow">' + esc(x.fullName) +
+                      '：成功</span><button class="mini-btn" data-undo="' + esc(x.fullName) + '">撤销</button></div>'
+                    : '<div class="result-line"><span class="grow">' + esc(x.fullName) + "：已保留</span></div>"
+              )
+              .join("");
+          dlg.body.querySelectorAll("[data-undo]").forEach((b) => (b.onclick = () => undoAction(b.dataset.undo)));
+          dlg.body.querySelectorAll("[data-retry-preview]").forEach((b) => {
+            b.onclick = async () => {
+              try {
+                const nextPreview = await actionRequest("/api/actions/preview", {
+                  selections: [{ fullName: b.dataset.retryPreview, action }],
+                });
+                dlg.close();
+                openPreviewDialog(nextPreview);
+              } catch (error) {
+                toastError(error);
+              }
+            };
+          });
+          preview.groups[action] = [];
+          if (!preview.groups.unstar.length && !preview.groups.keep.length) {
+            toast("全部动作已处理完成", "success");
+            dlg.close();
+            preview = null;
+            clearSelection();
+            refreshScan();
+          }
+        } catch (e) {
+          toastError(e);
+          btn.disabled = false;
+        }
+      }
+      async function undoAction(fullName) {
+        try {
+          const result = await actionRequest("/api/actions/undo", { fullName });
+          toast("撤销 " + esc(fullName) + "：" + esc(result.reason || result.status), "success");
+        } catch (e) {
+          toastError(e);
+        }
+      }
+
+      /* ---------- List 操作 Dialog ---------- */
+      function listOptionsDatalist() {
+        const id = "listNames";
+        let dl = $(id);
+        if (!dl) {
+          dl = document.createElement("datalist");
+          dl.id = id;
+          document.body.appendChild(dl);
+        }
+        dl.innerHTML = existingLists().map((l) => '<option value="' + esc(l) + '">').join("");
+        return id;
+      }
+      function listActionItems(presetItems) {
+        const items = Array.isArray(presetItems) ? presetItems : presetItems ? [presetItems] : selectedItems().filter((item) => item.relation?.starred).map((item) => item.fullName);
+        return [...new Set(items)];
+      }
+      function openListActionDialog(action, presetItems, presetList = "") {
+        action = action === "add" || action === "unique" ? "assign" : action;
+        const items = listActionItems(presetItems);
+        if (!items.length) return toast("请先选择至少一个已 Star 的项目，再执行 List 操作。", "error");
+        const label = { assign: "归类到 List", remove: "移出 List" }[action];
+        const dlId = listOptionsDatalist();
+        const dlg = openDialog({
+          title: label,
+          subtitle: items.length === 1 ? esc(items[0]) : "将先预览 " + items.length + " 个已 Star 项目，并按动作分组确认。",
+          body:
+            '<div class="form-grid"><label>目标 List 名称' +
+            '<input id="listActionInput" list="' + dlId + '" value="' + esc(presetList) + '" placeholder="选择已有 List" required /></label></div>' +
+            '<p class="muted tiny" style="margin-top:10px">已有 Lists：' +
+            (existingLists().map((l) => '<span class="chip-list">' + esc(l) + "</span>").join("") || "暂无") + "</p>",
+          actions: [
+            {
+              label: "确认" + label,
+              kind: "primary",
+              handler: async ({ btn, close }) => {
+                const value = dlg.body.querySelector("#listActionInput").value.trim();
+                if (!value) return;
+                btn.disabled = true;
+                try {
+                  const nextPreview = await actionRequest("/api/lists/actions/preview", {
+                    selections: items.map((fullName) => ({ fullName, list: value, action })),
+                  });
+                  close();
+                  openListPreviewDialog(nextPreview);
+                } catch (e) {
+                  toastError(e);
+                  btn.disabled = false;
+                }
+              },
+            },
+            { label: "取消", handler: ({ close }) => close() },
+          ],
+        });
+      }
+      function openListPreviewDialog(nextPreview) {
+        listPreview = nextPreview;
+        const groups = ["assign", "remove"];
+        const labels = { assign: "归类到 List", remove: "移出 List" };
+        const dlg = openDialog({
+          title: "List 动作预览",
+          subtitle: "请逐组确认；归类到 List 会替换项目原有的归类。",
+          wide: true,
+          body: "",
+          actions: [
+            ...groups.map((action) => ({ label: "", kind: action === "assign" ? "primary" : undefined, handler: ({ btn }) => confirmListGroup(action, btn, dlg) })),
+            { label: "关闭", handler: ({ close }) => close() },
+          ],
+        });
+        const buttons = Object.fromEntries(groups.map((action, index) => [action, dlg.foot.children[index]]));
+        function paint() {
+          dlg.body.innerHTML = groups.map((action) =>
+            "<p class='section-title'>" + labels[action] + "（" + (listPreview.groups[action] || []).length + "）</p><p>" +
+            esc((listPreview.groups[action] || []).map((entry) => entry.fullName + " → " + entry.list).join("、") || "无") + "</p>"
+          ).join("") + describeInvalid(listPreview.invalid);
+          for (const action of groups) {
+            const count = (listPreview.groups[action] || []).length;
+            buttons[action].textContent = "确认" + labels[action] + "（" + count + "）";
+            buttons[action].disabled = count === 0;
+          }
+        }
+        paint();
+      }
+      async function confirmListGroup(action, btn, dlg) {
+        if (!listPreview) return;
+        const actions = listPreview.groups[action] || [];
+        if (!actions.length) return;
+        btn.disabled = true;
+        try {
+          const result = await actionRequest("/api/lists/actions/confirm", {
+            previewId: listPreview.id,
+            actions,
+          });
+          dlg.body.innerHTML =
+            "<p><strong>已执行 " + esc(action) + "</strong>：成功 " + result.summary.success + "，失败 " + result.summary.failed + "。</p>" +
+            result.results.map((entry) => entry.status === "failed"
+              ? '<div class="result-line"><span class="grow inline-error">' + esc(entry.fullName) + "：" + esc(entry.reason) + '</span><button class="mini-btn" data-list-retry="' + esc(entry.fullName) + '" data-list="' + esc(entry.list) + '" data-list-action="' + esc(entry.action) + '">重新预览</button></div>'
+              : '<div class="result-line"><span class="grow">' + esc(entry.fullName) + "：成功</span></div>").join("");
+          dlg.body.querySelectorAll("[data-list-retry]").forEach((button) => {
+            button.onclick = () => {
+              dlg.close();
+              openListActionDialog(button.dataset.listAction, [button.dataset.listRetry], button.dataset.list);
+            };
+          });
+          listPreview.groups[action] = [];
+          if (!["assign", "remove"].some((group) => listPreview.groups[group]?.length)) {
+            listPreview = null;
+            clearSelection();
+            await refreshScan();
+            dlg.close();
+            toast("全部 List 动作已处理完成。", "success");
+          }
+        } catch (error) {
+          toastError(error);
+          btn.disabled = false;
+        }
+      }
+      function openCreateListDialog() {
+        const dlg = openDialog({
+          title: "新建 GitHub List",
+          body:
+            '<div class="form-grid"><label>List 名称' +
+            '<input id="createListInput" placeholder="例如：学习" required /></label></div>',
+          actions: [
+            {
+              label: "新建",
+              kind: "primary",
+              handler: async ({ btn, close }) => {
+                const value = dlg.body.querySelector("#createListInput").value.trim();
+                if (!value) return;
+                btn.disabled = true;
+                try {
+                  const result = await actionRequest("/api/lists", { name: value });
+                  if (result.status !== "succeeded") throw new Error(result.error || "新建 List 失败");
+                  await refreshScan();
+                  toast("已新建 List：" + esc(result.list?.name || value), "success");
+                  close();
+                } catch (e) {
+                  toastError(e);
+                  btn.disabled = false;
+                }
+              },
+            },
+            { label: "取消", handler: ({ close }) => close() },
+          ],
+        });
+      }
+      async function openRulesDialog() {
+        let draftRules = [];
+        try {
+          const overview = await (await fetch("/api/lists")).json();
+          draftRules = (overview.rules || []).map((rule) => ({ ...rule }));
+        } catch {}
+        const dlId = listOptionsDatalist();
+        const dlg = openDialog({
+          title: "维护归类规则",
+          subtitle: "先在此编辑完整规则集，再一次性保存；已有规则不会因新增规则而被覆盖。",
+          wide: true,
+          body: "",
+          actions: [
+            {
+              label: "添加到草稿",
+              handler: () => {
+                const type = dlg.body.querySelector("#ruleType").value;
+                const value = dlg.body.querySelector("#ruleValue").value.trim();
+                const list = dlg.body.querySelector("#ruleList").value.trim();
+                if (!value || !list) return toast("请填写匹配值和目标 List。", "error");
+                if (!existingLists().includes(list)) return toast("目标 List 尚不存在，请先新建或选择已有 List。", "error");
+                draftRules.push({ type, value, list });
+                paint();
+              },
+            },
+            {
+              label: "保存全部规则",
+              kind: "primary",
+              handler: async ({ btn, close }) => {
+                btn.disabled = true;
+                try {
+                  const result = await actionRequest("/api/lists/rules", { rules: draftRules });
+                  if (result.status !== "succeeded") throw new Error(result.error || "保存归类规则失败");
+                  await refreshScan();
+                  toast("归类规则已保存。", "success");
+                  close();
+                } catch (e) {
+                  toastError(e);
+                  btn.disabled = false;
+                }
+              },
+            },
+            { label: "取消", handler: ({ close }) => close() },
+          ],
+        });
+        function paint() {
+          dlg.body.innerHTML =
+            '<p class="section-title">当前草稿（' + draftRules.length + '）</p><div id="rulesList">' +
+            (draftRules.length
+              ? draftRules.map((rule, index) => '<div class="list-row"><span class="grow"><span class="chip-list">' + esc(rule.type) + " : " + esc(rule.value) + " → " + esc(rule.list) + '</span></span><button class="mini-btn" data-remove-rule="' + index + '">移除</button></div>').join("")
+              : '<span class="muted">暂无规则。保存将清空现有规则。</span>') +
+            '</div><p class="section-title">新增规则</p>' +
+            '<div class="form-grid rules-form-grid">' +
+            '<label>类型<select id="ruleType"><option value="language">language</option><option value="topic">topic</option><option value="keyword">keyword</option></select></label>' +
+            '<label>匹配值<input id="ruleValue" placeholder="例如：JavaScript" /></label>' +
+            '<label>目标 List<input id="ruleList" list="' + dlId + '" placeholder="选择已有 List" /></label></div>';
+          enhanceFormControls(dlg.body);
+          dlg.body.querySelectorAll("[data-remove-rule]").forEach((button) => {
+            button.onclick = () => {
+              draftRules.splice(Number(button.dataset.removeRule), 1);
+              paint();
+            };
+          });
+        }
+        paint();
+      }
+      async function openListsOverviewDialog() {
+        try {
+          const response = await fetch("/api/lists");
+          const overview = await response.json();
+          if (!response.ok || overview.status !== "ok") throw new Error(overview.error || "暂无可用的 List 数据");
+          const dlg = openDialog({
+            title: "GitHub Lists 概览",
+            wide: true,
+            body: overview.lists.length
+              ? overview.lists
+                  .map(
+                    (l) =>
+                      '<div class="list-row"><span class="name">' + esc(l.name) + '</span><span class="muted tiny">项目 ' +
+                      l.repositoryCount + " · 待处理 " + l.pendingCount + '</span><button class="mini-btn" data-list-rename="' + esc(l.id) + '">重命名</button><button class="mini-btn" data-list-delete="' + esc(l.id) + '">删除</button></div>'
+                  )
+                  .join("") +
+                '<p class="muted tiny">可通过批量操作条的「List 操作」将项目归类到一个 List，或移出当前 List。</p>'
+              : '<p class="muted">当前扫描结果中没有可用的 GitHub List。</p>',
+            actions: [
+              { label: "新建 List", kind: "primary", handler: ({ close }) => { close(); openCreateListDialog(); } },
+              { label: "关闭", handler: ({ close }) => close() },
+            ],
+          });
+          dlg.body.querySelectorAll("[data-list-rename]").forEach((button) => {
+            button.onclick = () => {
+              const list = overview.lists.find((entry) => String(entry.id) === button.dataset.listRename);
+              if (list) { dlg.close(); openRenameListDialog(list); }
+            };
+          });
+          dlg.body.querySelectorAll("[data-list-delete]").forEach((button) => {
+            button.onclick = () => {
+              const list = overview.lists.find((entry) => String(entry.id) === button.dataset.listDelete);
+              if (list) { dlg.close(); openDeleteListDialog(list); }
+            };
+          });
+        } catch (e) {
+          toastError(e);
+        }
+      }
+      function openRenameListDialog(list) {
+        const dlg = openDialog({
+          title: "重命名 GitHub List",
+          subtitle: esc(list.name),
+          body: '<div class="form-grid"><label>新名称<input id="renameListInput" value="' + esc(list.name) + '" required /></label></div>',
+          actions: [
+            {
+              label: "保存名称",
+              kind: "primary",
+              handler: async ({ btn, close }) => {
+                const newName = dlg.body.querySelector("#renameListInput").value.trim();
+                if (!newName) return toast("请输入新的 List 名称。", "error");
+                btn.disabled = true;
+                try {
+                  const result = await actionRequest("/api/lists/rename", { list: list.id, newName });
+                  if (result.status !== "succeeded") throw new Error(result.error || "重命名 List 失败");
+                  await refreshScan();
+                  toast("List 已重命名。", "success");
+                  close();
+                } catch (error) {
+                  toastError(error);
+                  btn.disabled = false;
+                }
+              },
+            },
+            { label: "取消", handler: ({ close }) => close() },
+          ],
+        });
+      }
+      function openDeleteListDialog(list) {
+        const dlg = openDialog({
+          title: "删除 GitHub List",
+          subtitle: esc(list.name),
+          body: '<p class="inline-error"><strong>删除 List 会移除这一分类集合。</strong>项目本身不会被删除；请确认名称和项目数量后继续。</p><p>项目数量：' + esc(list.repositoryCount) + "</p>",
+          actions: [
+            {
+              label: "确认删除 List",
+              kind: "danger",
+              handler: async ({ btn, close }) => {
+                btn.disabled = true;
+                try {
+                  const result = await actionRequest("/api/lists/delete", { list: list.id, confirm: true });
+                  if (result.status !== "succeeded") throw new Error(result.error || "删除 List 失败");
+                  await refreshScan();
+                  toast("List 已删除。", "success");
+                  close();
+                } catch (error) {
+                  toastError(error);
+                  btn.disabled = false;
+                }
+              },
+            },
+            { label: "取消", handler: ({ close }) => close() },
+          ],
+        });
+      }
+
+      /* ---------- 阈值设置 Dialog ---------- */
+      function openThresholdsDialog() {
+        const t = data?.thresholds || {};
+        const dlg = openDialog({
+          title: "健康阈值设置",
+          subtitle: "超过对应月数未活动将计入健康信号。",
+          body:
+            '<div class="form-grid threshold-grid">' +
+            '<label>Commit（月）<input id="commitMonths" type="number" min="0" value="' + esc(t.noCommitMonths ?? 12) + '" /></label>' +
+            '<label>Release（月）<input id="releaseMonths" type="number" min="0" value="' + esc(t.noReleaseMonths ?? 18) + '" /></label>' +
+            '<label>活动（月）<input id="activityMonths" type="number" min="0" value="' + esc(t.noActivityMonths ?? 6) + '" /></label></div>',
+          actions: [
+            {
+              label: "保存并重新计算",
+              kind: "primary",
+              handler: async ({ btn, close }) => {
+                btn.disabled = true;
+                try {
+                  const r = await fetch("/api/recalculate", {
+                    method: "POST",
+                    headers: { "content-type": "application/json" },
+                    body: JSON.stringify({
+                      noCommitMonths: Number(dlg.body.querySelector("#commitMonths").value),
+                      noReleaseMonths: Number(dlg.body.querySelector("#releaseMonths").value),
+                      noActivityMonths: Number(dlg.body.querySelector("#activityMonths").value),
+                    }),
+                  });
+                  const value = await r.json();
+                  if (!r.ok) throw new Error(value.error || "重新计算失败");
+                  data = value;
+                  render();
+                  toast("已按当前阈值重新计算。", "success");
+                  close();
+                } catch (e) {
+                  toastError(e);
+                  btn.disabled = false;
+                }
+              },
+            },
+            { label: "取消", handler: ({ close }) => close() },
+          ],
+        });
+      }
+
+      /* ---------- 危险确认 Dialog（仓库生命周期） ---------- */
+      async function openLifecycleConfirmDialog(item, action, afterDone) {
+        try {
+          const p = await actionRequest("/api/repositories/lifecycle/preview", {
+            selections: [{ fullName: item.fullName, action }],
+          });
+          const isDelete = action === "delete";
+          const dlg = openDialog({
+            title: { archive: "Archive 仓库", unarchive: "Unarchive 仓库", delete: "删除仓库" }[action],
+            subtitle: esc(item.fullName),
+            body:
+              (isDelete
+                ? '<p class="inline-error"><strong>删除不可由本工具恢复。</strong>请输入完整 owner/repo 以确认：</p>' +
+                  '<div class="form-grid"><label>确认名称<input id="confirmName" placeholder="' + esc(item.fullName) + '" /></label></div>'
+                : "<p>确认执行 " + esc(action) + "？执行前已展示完整身份与健康证据。</p>") +
+              '<details class="raw"><summary>查看动作详情</summary><pre>' + esc(JSON.stringify(p.actions, null, 2)) + "</pre></details>",
+            actions: [
+              {
+                label: isDelete ? "永久删除" : "确认执行",
+                kind: "danger",
+                handler: async ({ btn, close }) => {
+                  let confirmFullName;
+                  if (isDelete) {
+                    confirmFullName = dlg.body.querySelector("#confirmName").value.trim();
+                    if (confirmFullName !== item.fullName)
+                      return toast("输入的名称与 " + esc(item.fullName) + " 不一致。", "error");
+                  }
+                  btn.disabled = true;
+                  try {
+                    const result = await actionRequest("/api/repositories/lifecycle/confirm", {
+                      previewId: p.id,
+                      actions: p.actions,
+                      confirm: true,
+                      confirmFullName,
+                    });
+                    toast(
+                      esc(result.status) + "：成功 " + (result.summary?.success || 0) + "，失败 " + (result.summary?.failed || 0),
+                      result.summary?.failed ? "error" : "success"
+                    );
+                    close();
+                    afterDone?.();
+                    refreshScan();
+                  } catch (e) {
+                    toastError(e);
+                    btn.disabled = false;
+                  }
+                },
+              },
+              { label: "取消", handler: ({ close }) => close() },
+            ],
+          });
+        } catch (e) {
+          toastError(e);
+        }
+      }
+      async function lifecyclePreviewBatch() {
+        const selections = selectedItems().map((item) => ({
+          fullName: item.fullName,
+          action: "archive",
+        }));
+        if (!selections.length) return toast("请先勾选本人拥有的项目条目。", "error");
+        try {
+          const p = await actionRequest("/api/repositories/lifecycle/preview", { selections });
+          openDialog({
+            title: "仓库生命周期（高级区域）",
+            wide: true,
+            body:
+              "<p class='section-title'>Archive</p><p>" + esc(p.groups.archive.map((x) => x.fullName).join("、") || "无") +
+              "</p><p class='section-title'>Unarchive</p><p>" + esc(p.groups.unarchive.map((x) => x.fullName).join("、") || "无") +
+              "</p>" + describeInvalid(p.invalid) +
+              '<p class="inline-error">删除不可由本工具恢复；请点击项目行打开详情，再逐项执行 Unarchive 或删除并确认。</p>' +
+              '<details class="raw"><summary>查看动作详情</summary><pre>' + esc(JSON.stringify(p.actions, null, 2)) + "</pre></details>",
+            actions: [{ label: "知道了", kind: "primary", handler: ({ close }) => close() }],
+          });
+        } catch (e) {
+          toastError(e);
+        }
+      }
+
+      /* ---------- 动作历史 Dialog ---------- */
+      const historyActionLabels = {
+        scan: "扫描",
+        unstar: "取消 Star",
+        keep: "保留当前关系",
+        "list-assign": "归类到 List",
+        "list-add": "归类到 List",
+        "list-remove": "移出 List",
+        "list-unique": "设为唯一归类",
+        "list-create": "新建 List",
+        "list-rename": "重命名 List",
+        "list-delete": "删除 List",
+        archive: "归档仓库",
+        unarchive: "取消归档",
+        delete: "删除仓库",
+        "undo-unstar": "撤销取消 Star",
+      };
+      const historyStatusLabels = {
+        pending: "待执行",
+        succeeded: "已成功",
+        success: "已成功",
+        failed: "失败",
+        failure: "失败",
+        skipped: "已跳过",
+        undone: "已撤销",
+        cancelled: "已取消",
+        canceled: "已取消",
+      };
+      function historyActionLabel(action) {
+        const value = String(action || "").toLowerCase();
+        if (historyActionLabels[value]) return historyActionLabels[value];
+        if (value.startsWith("list-")) return "List 操作";
+        return action || "批量动作";
+      }
+      function historyStatusLabel(entry) {
+        const value = String(entry?.status || entry?.result || "").toLowerCase();
+        return historyStatusLabels[value] || entry?.status || entry?.result || "未知状态";
+      }
+      async function openHistoryDialog() {
+        try {
+          const r = await fetch("/api/history");
+          const h = await r.json();
+          if (!r.ok) throw new Error(h.error || "读取动作历史失败");
+          const entries = (h.entries || [])
+            .slice()
+            .reverse()
+            .map(
+              (x) => {
+                const eventTime = x.time || x.at || x.createdAt;
+                const timeHtml = eventTime
+                  ? '<time class="history-time muted tiny" datetime="' + esc(eventTime) + '">时间：' + esc(formatDateTime(eventTime)) + "</time>"
+                  : '<span class="history-time muted tiny">时间未知</span>';
+                return '<div class="result-line"><span class="grow history-content"><span class="history-title">' + esc(x.project || x.list || "批量动作") +
+                " · " + esc(historyActionLabel(x.action)) + " · " + esc(historyStatusLabel(x)) +
+                (x.reason ? ' <span class="inline-error">' + esc(x.reason) + "</span>" : "") +
+                "</span>" + timeHtml + "</span>" +
+                (x.status === "failed" && x.action === "scan"
+                  ? '<button class="mini-btn" data-history-rescan>重新扫描</button>'
+                  : x.status === "failed" && x.project
+                    ? '<button class="mini-btn" data-history-retry="' + esc(x.project) + '" data-history-action="' + esc(x.action || "") + '" data-history-list="' + esc(x.list || "") + '">重新预览</button>'
+                    : "") +
+                "</div>";
+              }
+            )
+            .join("");
+          const dlg = openDialog({
+            title: "动作历史",
+            wide: true,
+            body: entries || '<p class="muted">暂无动作历史。</p>',
+            actions: [{ label: "关闭", kind: "primary", handler: ({ close }) => close() }],
+          });
+          dlg.body.querySelectorAll("[data-history-rescan]").forEach((button) => {
+            button.onclick = () => { dlg.close(); runScan(); };
+          });
+          dlg.body.querySelectorAll("[data-history-retry]").forEach((button) => {
+            button.onclick = async () => {
+              try {
+                const fullName = button.dataset.historyRetry;
+                const action = button.dataset.historyAction;
+                const list = button.dataset.historyList;
+                const item = (data?.items || []).find((entry) => entry.fullName === fullName);
+                if (action === "unstar") {
+                  const nextPreview = await actionRequest("/api/actions/preview", { selections: [{ fullName, action }] });
+                  dlg.close();
+                  return openPreviewDialog(nextPreview);
+                }
+                if (action.startsWith("list-")) {
+                  dlg.close();
+                  return openListActionDialog(action.slice("list-".length), [fullName], list);
+                }
+                if (["archive", "unarchive", "delete"].includes(action) && item) {
+                  dlg.close();
+                  return openLifecycleConfirmDialog(item, action);
+                }
+                toast("该项目已不在最近扫描结果中；请重新扫描后再试。", "error");
+              } catch (error) {
+                toastError(error);
+              }
+            };
+          });
+        } catch (e) {
+          toastError(e);
+        }
+      }
+
+      /* ---------- 顶栏动作 ---------- */
+      async function runScan() {
+        $("scan").disabled = true;
+        $("progressTrack").hidden = false;
+        $("bar").style.width = "8%";
+        let progressTimer = null;
+        try {
+          progressTimer = setInterval(pollScanProgress, 500);
+          await pollScanProgress();
+          const r = await fetch("/api/scan", { method: "POST" });
+          data = await r.json();
+          if (!r.ok) throw new Error(data.error || data.auth?.message || "扫描失败");
+          render();
+          toast("扫描完成：成功 " + (data.summary?.success || 0) + "，失败 " + (data.summary?.failed || 0) + "。", "success");
+        } catch (e) {
+          toastError(e);
+        } finally {
+          clearInterval(progressTimer);
+          await pollScanProgress().catch(() => {});
+          $("scan").disabled = false;
+          setTimeout(() => ($("progressTrack").hidden = true), 1200);
+        }
+      }
+      $("scan").onclick = runScan;
+      $("preview").onclick = async () => {
+        try {
+          if (!selectedActions().length) return toast("请先勾选至少一个已 Star 的项目。", "error");
+          const p = await actionRequest("/api/actions/preview", { selections: selectedActions() });
+          if (p.status === "no-scan") throw new Error("暂无扫描结果");
+          openPreviewDialog(p);
+        } catch (e) {
+          toastError(e);
+        }
+      };
+      $("lifecyclePreview").onclick = lifecyclePreviewBatch;
+      $("history").onclick = openHistoryDialog;
+      $("exportData").onclick = async () => {
+        try {
+          const r = await actionRequest("/api/data/export", {});
+          toast("已导出 JSON 备份：" + esc(r.path), "success", 6000);
+        } catch (e) {
+          toastError(e);
+        }
+      };
+      $("thresholdsBtn").onclick = openThresholdsDialog;
+
+      setupMenu("listsMenuBtn", "listsMenu");
+      setupMenu("listOpBtn", "listOpMenu");
+      enhanceFormControls();
+      $("listsMenu").addEventListener("click", (e) => {
+        const action = e.target.dataset?.menu;
+        if (action === "overview") openListsOverviewDialog();
+        if (action === "create") openCreateListDialog();
+        if (action === "rules") openRulesDialog();
+      });
+      $("listOpMenu").addEventListener("click", (e) => {
+        const op = e.target.dataset?.op;
+        if (op) openListActionDialog(op);
+      });
+
+      ["search", "signal", "relation", "listFilter"].forEach((id) => ($(id).oninput = render));
+      document.querySelectorAll("input[name=view]").forEach((x) => (x.onchange = render));
+
+      fetch("/api/data/path")
+        .then((r) => r.json())
+        .then((x) => {
+          if (x.path) {
+            $("dataPath").textContent = "数据文件：" + x.path;
+            $("dataPath").title = x.path;
+          }
+        });
+
+      async function init() {
+        try {
+          const [s, l] = await Promise.all([fetch("/api/status"), fetch("/api/scan")]);
+          data = await l.json();
+          data.auth = await s.json();
+          render();
+        } catch (e) {
+          toastError(e);
+        }
+      }
+      init();
+    </script>
+  </body>
+</html>

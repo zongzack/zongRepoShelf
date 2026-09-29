@@ -37,6 +37,23 @@ test('局部读取失败会计入失败并保留失败原因', async () => {
   assert.match(result.failures[0].reason, /rate limit/);
 });
 
+test('扫描进度覆盖健康证据和 Lists 阶段', async () => {
+  const seen = [];
+  const github = {
+    async authStatus() { return { state: 'authenticated' }; },
+    async listStarred() { return [repo('acme/repo')]; },
+    async listOwned() { return []; },
+    async getHealthEvidence() { return {}; },
+    async listLists() { return [{ id: 'list-1', name: '工具' }]; },
+    async listListRepositories() { return []; },
+  };
+  const orchestrator = createOrchestrator({ github, store: memoryStore() });
+  await orchestrator.scan({ onProgress: (progress) => seen.push(progress) });
+  assert.ok(seen.some((progress) => progress.phase === 'health' && progress.percent < 90));
+  assert.ok(seen.some((progress) => progress.phase === 'lists'));
+  assert.equal(orchestrator.getProgress().percent, 100);
+});
+
 test('最近扫描可通过单个 JSON 存储重新加载', async () => {
   const store = memoryStore();
   const github = { async authStatus() { return { state: 'authenticated', message: 'ok' }; }, async listStarred() { return [repo('a/b')]; }, async listOwned() { return []; } };
@@ -126,11 +143,13 @@ test('批量动作必须先预览并按取消 Star/保留关系分组确认', as
   const saved = await store.load(); assert.equal(saved.audit.length, 2); assert.equal(saved.audit[0].project, 'acme/a');
 });
 
-test('批量动作逐项保留失败，失败项可以单独重试', async () => {
+test('批量动作逐项保留失败，失败项必须重新预览后才能再次执行', async () => {
   let attempts = 0; const github = { async authStatus() { return { state: 'authenticated' }; }, async listStarred() { return [repo('acme/a'), repo('acme/b')]; }, async listOwned() { return []; }, async unstar(name) { attempts++; if (name === 'acme/a' && attempts === 1) throw new Error('rate limit exceeded'); } };
   const orchestrator = createOrchestrator({ github, store: memoryStore() }); await orchestrator.scan(); const preview = await orchestrator.previewActions({ unstar: ['acme/a', 'acme/b'] });
   const result = await orchestrator.confirmActions(preview); assert.equal(result.summary.success, 1); assert.equal(result.summary.failed, 1); assert.match(result.results.find((r) => r.status === 'failed').reason, /rate limit/);
-  const retried = await orchestrator.retryAction({ fullName: 'acme/a' }); assert.equal(retried.summary.success, 1); assert.equal(attempts, 3);
+  const retryPreview = await orchestrator.previewActions({ selections: [{ fullName: 'acme/a', action: 'unstar' }] });
+  const retried = await orchestrator.confirmActions({ previewId: retryPreview.id, actions: retryPreview.actions });
+  assert.equal(retried.summary.success, 1); assert.equal(attempts, 3);
 });
 
 test('撤销取消 Star 前重新检查状态，已恢复的关系不会被覆盖', async () => {
@@ -140,7 +159,28 @@ test('撤销取消 Star 前重新检查状态，已恢复的关系不会被覆�
   const second = await orchestrator.undoStar({ fullName: 'acme/a' }); assert.equal(second.status, 'not-found');
 });
 
-test('重新扫描不会覆盖既有动作结果，List 失败可从历史单项重试', async () => {
+test('重新扫描后不能撤销旧扫描中的取消 Star 动作', async () => {
+  let day = 1;
+  let stars = 0;
+  const github = {
+    async authStatus() { return { state: 'authenticated' }; },
+    async listStarred() { return [repo('acme/a')]; },
+    async listOwned() { return []; },
+    async unstar() {},
+    async isStarred() { return false; },
+    async star() { stars++; },
+  };
+  const orchestrator = createOrchestrator({ github, store: memoryStore(), clock: () => new Date(`2026-09-${String(day++).padStart(2, '0')}T00:00:00Z`) });
+  await orchestrator.scan();
+  const preview = await orchestrator.previewActions({ selections: [{ fullName: 'acme/a', action: 'unstar' }] });
+  await orchestrator.confirmActions({ previewId: preview.id, actions: preview.actions });
+  await orchestrator.scan();
+  const undone = await orchestrator.undoStar({ fullName: 'acme/a' });
+  assert.equal(undone.status, 'not-found');
+  assert.equal(stars, 0);
+});
+
+test('重新扫描不会覆盖既有动作结果，List 失败可重新预览后单项执行', async () => {
   let fail = true;
   const store = memoryStore();
   const github = {
@@ -149,16 +189,17 @@ test('重新扫描不会覆盖既有动作结果，List 失败可从历史单项
     async listOwned() { return []; },
     async listLists() { return [{ id: 1, name: '工具' }]; },
     async listListRepositories() { return []; },
-    async addToList() { if (fail) throw new Error('temporary failure'); }
+    async assignToList() { if (fail) throw new Error('temporary failure'); }
   };
   const orch = createOrchestrator({ github, store });
   await orch.scan();
-  const preview = await orch.previewListActions({ selections: [{ fullName: 'acme/a', list: '工具', action: 'add' }] });
+  const preview = await orch.previewListActions({ selections: [{ fullName: 'acme/a', list: '工具', action: 'assign' }] });
   const failed = await orch.confirmListActions(preview);
   assert.equal(failed.results[0].status, 'failed');
   assert.equal((await orch.actionHistory()).entries.at(-1).retryable, true);
   fail = false;
-  assert.equal((await orch.retryListAction({ fullName: 'acme/a' })).summary.success, 1);
+  const retryPreview = await orch.previewListActions({ selections: [{ fullName: 'acme/a', list: '工具', action: 'assign' }] });
+  assert.equal((await orch.confirmListActions({ previewId: retryPreview.id, actions: retryPreview.actions })).summary.success, 1);
   await orch.scan();
   assert.equal((await orch.loadLastScan()).actionResults.length >= 2, true);
 });

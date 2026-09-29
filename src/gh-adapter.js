@@ -19,10 +19,71 @@ function normalizeListArgs(listId, fullName) {
   return [listId, fullName];
 }
 
+function graphQlString(value) {
+  return JSON.stringify(String(value));
+}
+
+function parseGraphQl(output) {
+  const parsed = typeof output === 'string' ? JSON.parse(output) : output;
+  if (parsed?.errors?.length) throw new Error(parsed.errors.map((error) => error.message).join('; '));
+  return parsed?.data ?? parsed;
+}
+
 export function createGhAdapter({ runner = execFile } = {}) {
+  let listRepositoryCache = new Map();
   async function apiJson(path) {
     const output = await runGh(['api', '-H', 'Accept: application/vnd.github+json', path], runner);
     return typeof output === 'string' ? JSON.parse(output) : output;
+  }
+  async function graphQl(query) {
+    const output = await runGh(['api', 'graphql', '-f', `query=${query}`], runner);
+    return parseGraphQl(output);
+  }
+  async function listStateForRepository(fullName) {
+    if (!fullName?.includes('/')) throw new TypeError('fullName is required');
+    const [owner, name] = fullName.split('/');
+    const state = await graphQl(`query { repository(owner: ${graphQlString(owner)}, name: ${graphQlString(name)}) { id } }`);
+    const repositoryId = state.repository?.id;
+    if (!repositoryId) throw new Error(`找不到项目条目：${fullName}`);
+    const listIds = [];
+    for (const list of await listAllLists()) {
+      const members = await listRepositoriesForList(list.id);
+      if (members.some((item) => item.full_name === fullName)) listIds.push(String(list.id));
+    }
+    return { repositoryId, listIds };
+  }
+  async function replaceRepositoryLists(repositoryId, listIds) {
+    await graphQl(`mutation { updateUserListsForItem(input: { itemId: ${graphQlString(repositoryId)}, listIds: [${listIds.map(graphQlString).join(',')}] }) { lists { id name } } }`);
+    listRepositoryCache = new Map();
+  }
+  async function listAllLists() {
+    const lists = [];
+    let after = null;
+    do {
+      const cursor = after ? `, after: ${graphQlString(after)}` : '';
+      const result = await graphQl(`query { viewer { lists(first: 100${cursor}) { nodes { id name description isPrivate items { totalCount } } pageInfo { hasNextPage endCursor } } } }`);
+      const connection = result.viewer?.lists || {};
+      lists.push(...(connection.nodes || []));
+      after = connection.pageInfo?.hasNextPage ? connection.pageInfo.endCursor : null;
+    } while (after);
+    return lists;
+  }
+  async function listRepositoriesForList(listId) {
+    const cached = listRepositoryCache.get(String(listId));
+    if (cached) return cached;
+    const repositories = [];
+    let after = null;
+    do {
+      const cursor = after ? `, after: ${graphQlString(after)}` : '';
+      const result = await graphQl(`query { node(id: ${graphQlString(listId)}) { ... on UserList { items(first: 100${cursor}) { nodes { ... on Repository { id nameWithOwner } } pageInfo { hasNextPage endCursor } } } } }`);
+      const connection = result.node?.items || {};
+      repositories.push(...(connection.nodes || [])
+        .filter((item) => item?.nameWithOwner)
+        .map((item) => ({ id: item.id, full_name: item.nameWithOwner })));
+      after = connection.pageInfo?.hasNextPage ? connection.pageInfo.endCursor : null;
+    } while (after);
+    listRepositoryCache.set(String(listId), repositories);
+    return repositories;
   }
   return {
     async authStatus() {
@@ -114,41 +175,48 @@ export function createGhAdapter({ runner = execFile } = {}) {
       return evidence;
     },
     async listLists() {
-      const output = await runGh(['api', '--paginate', '--slurp', '-H', 'Accept: application/vnd.github+json', 'user/lists?per_page=100'], runner);
-      return parsePages(output);
+      listRepositoryCache = new Map();
+      return (await listAllLists()).map((list) => ({
+        id: String(list.id),
+        name: list.name,
+        description: list.description || '',
+        private: Boolean(list.isPrivate),
+        repositoryCount: Number(list.items?.totalCount || 0),
+      }));
     },
     async listListRepositories(listId) {
       if (!listId) throw new TypeError('listId is required');
-      const output = await runGh(['api', '--paginate', '--slurp', '-H', 'Accept: application/vnd.github+json', `user/lists/${listId}/repos?per_page=100`], runner);
-      return parsePages(output);
+      return listRepositoriesForList(listId);
+    },
+    async assignToList(listId, fullName) {
+      [listId, fullName] = normalizeListArgs(listId, fullName);
+      try { const state = await listStateForRepository(fullName); await replaceRepositoryLists(state.repositoryId, [String(listId)]); return { ok: true, listId, fullName, action: 'assign' }; }
+      catch (error) { throw new Error(`归类到 List 失败：${friendlyGhError(error)}`); }
     },
     async addToList(listId, fullName) {
-      [listId, fullName] = normalizeListArgs(listId, fullName);
-      try { await runGh(['api', '--method', 'PUT', '-H', 'Accept: application/vnd.github+json', `user/lists/${listId}/repos/${fullName}`], runner); return { ok: true, listId, fullName, action: 'add' }; }
-      catch (error) { throw new Error(`加入 List 失败：${friendlyGhError(error)}`); }
+      return this.assignToList(listId, fullName);
     },
     async removeFromList(listId, fullName) {
       [listId, fullName] = normalizeListArgs(listId, fullName);
-      try { await runGh(['api', '--method', 'DELETE', '-H', 'Accept: application/vnd.github+json', `user/lists/${listId}/repos/${fullName}`], runner); return { ok: true, listId, fullName, action: 'remove' }; }
+      try { const state = await listStateForRepository(fullName); await replaceRepositoryLists(state.repositoryId, state.listIds.filter((id) => id !== String(listId))); return { ok: true, listId, fullName, action: 'remove' }; }
       catch (error) { throw new Error(`移出 List 失败：${friendlyGhError(error)}`); }
     },
     async setUniqueList(listId, fullName) {
-      [listId, fullName] = normalizeListArgs(listId, fullName);
-      return this.addToList(listId, fullName);
+      return this.assignToList(listId, fullName);
     },
     async createList(name, description = '') {
       if (!name?.trim()) throw new TypeError('name is required');
-      try { const output = await runGh(['api', '--method', 'POST', '-H', 'Accept: application/vnd.github+json', '-f', `name=${name}`, '-f', `description=${description}`, 'user/lists'], runner); return typeof output === 'string' ? JSON.parse(output) : output; }
+      try { const result = await graphQl(`mutation { createUserList(input: { name: ${graphQlString(name)}, description: ${graphQlString(description)} }) { list { id name description isPrivate } } }`); const list = result.createUserList?.list; return { id: list?.id, name: list?.name, description: list?.description || '', private: Boolean(list?.isPrivate) }; }
       catch (error) { throw new Error(`新建 List 失败：${friendlyGhError(error)}`); }
     },
     async renameList(listId, name) {
       if (!listId || !name?.trim()) throw new TypeError('listId and name are required');
-      try { const output = await runGh(['api', '--method', 'PATCH', '-H', 'Accept: application/vnd.github+json', '-f', `name=${name}`, `user/lists/${listId}`], runner); return typeof output === 'string' ? JSON.parse(output) : output; }
+      try { const result = await graphQl(`mutation { updateUserList(input: { listId: ${graphQlString(listId)}, name: ${graphQlString(name)} }) { list { id name description isPrivate } } }`); const list = result.updateUserList?.list; return { id: list?.id, name: list?.name, description: list?.description || '', private: Boolean(list?.isPrivate) }; }
       catch (error) { throw new Error(`重命名 List 失败：${friendlyGhError(error)}`); }
     },
     async deleteList(listId) {
       if (!listId) throw new TypeError('listId is required');
-      try { await runGh(['api', '--method', 'DELETE', '-H', 'Accept: application/vnd.github+json', `user/lists/${listId}`], runner); return { ok: true, listId, action: 'delete' }; }
+      try { await graphQl(`mutation { deleteUserList(input: { listId: ${graphQlString(listId)} }) { clientMutationId } }`); return { ok: true, listId, action: 'delete' }; }
       catch (error) { throw new Error(`删除 List 失败：${friendlyGhError(error)}`); }
     }
   };

@@ -1,5 +1,5 @@
 import { copyFile, mkdir, readFile, rename, writeFile } from 'node:fs/promises';
-import { dirname } from 'node:path';
+import { dirname, resolve } from 'node:path';
 
 export function createJsonStore(filePath) {
   if (!filePath) throw new TypeError('filePath is required');
@@ -41,8 +41,13 @@ export function createJsonStore(filePath) {
   };
 }
 
-export function defaultDataPath(env = process.env, platform = process.platform) {
+/**
+ * Resolve the runtime data file. By default it lives in the repository root
+ * (the directory containing `src/`'s parent), so the application keeps its
+ * local state alongside the project and the path can be ignored by Git.
+ * `GITHUB_ORGANIZER_DATA` remains available for explicit deployments.
+ */
+export function defaultDataPath(env = process.env, platform = process.platform, projectRoot = process.cwd()) {
   if (env.GITHUB_ORGANIZER_DATA) return env.GITHUB_ORGANIZER_DATA;
-  if (platform === 'win32') return `${env.APPDATA || '.'}/github-organizer/data.json`;
-  return `${env.XDG_DATA_HOME || `${env.HOME || '.'}/.local/share`}/github-organizer/data.json`;
+  return resolve(projectRoot, 'data.json');
 }

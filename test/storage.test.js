@@ -3,7 +3,12 @@ import assert from 'node:assert/strict';
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { createJsonStore } from '../src/storage.js';
+import { createJsonStore, defaultDataPath } from '../src/storage.js';
+
+test('默认数据文件位于项目目录且支持显式覆盖', () => {
+  assert.equal(defaultDataPath({}, 'darwin', '/tmp/github-organizer-project'), '/tmp/github-organizer-project/data.json');
+  assert.equal(defaultDataPath({ GITHUB_ORGANIZER_DATA: '/tmp/custom/data.json' }, 'darwin', '/tmp/project'), '/tmp/custom/data.json');
+});
 
 test('JSON 存储原子写入并过滤 token 与正文', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'gh-org-')); const path = join(dir, 'data.json');
